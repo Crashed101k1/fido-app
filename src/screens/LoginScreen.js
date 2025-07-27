@@ -1,25 +1,26 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
-  Image,
-  Dimensions,
-  TextInput,
   Alert,
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
-} from "react-native";
-
-const { width, height } = Dimensions.get("window");
+  Platform,
+  Image,
+  ActivityIndicator
+} from 'react-native';
+import { useAuth } from '../context/AuthContext';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
       Alert.alert("Error", "Por favor ingresa tu email y contraseña");
       return;
@@ -32,9 +33,37 @@ export default function LoginScreen({ navigation }) {
       return;
     }
 
-    // Aquí puedes agregar la lógica de autenticación
-    // Por ahora, navegamos directamente al Main Navigator
-    navigation.navigate("Main");
+    try {
+      setLoading(true);
+      await login(email, password);
+      // La navegación se manejará automáticamente por el AuthContext
+    } catch (error) {
+      let errorMessage = "Error al iniciar sesión";
+      
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = "No existe una cuenta con este correo electrónico";
+          break;
+        case 'auth/wrong-password':
+          errorMessage = "Contraseña incorrecta";
+          break;
+        case 'auth/invalid-email':
+          errorMessage = "Correo electrónico inválido";
+          break;
+        case 'auth/user-disabled':
+          errorMessage = "Esta cuenta ha sido deshabilitada";
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = "Demasiados intentos fallidos. Intenta más tarde";
+          break;
+        default:
+          errorMessage = error.message;
+      }
+      
+      Alert.alert("Error", errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRegister = () => {
@@ -42,8 +71,8 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleLogoPress = () => {
-    // Atajo de desarrollador - acceso directo al HomeScreen
-    navigation.navigate("Main");
+    // Remover el atajo de desarrollador en producción
+    Alert.alert("FIDO", "¡Bienvenido a FIDO!");
   };
 
   return (
@@ -84,6 +113,7 @@ export default function LoginScreen({ navigation }) {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!loading}
             />
             
             <TextInput
@@ -95,19 +125,30 @@ export default function LoginScreen({ navigation }) {
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!loading}
             />
 
             {/* Botón de iniciar sesión */}
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-              <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
+            <TouchableOpacity 
+              style={[styles.loginButton, loading && styles.loginButtonDisabled]} 
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
+              )}
             </TouchableOpacity>
           </View>
 
           {/* Registro */}
           <View style={styles.registerContainer}>
             <Text style={styles.registerText}>¿No tienes cuenta?</Text>
-            <TouchableOpacity onPress={handleRegister}>
-              <Text style={styles.registerLink}>Regístrate aquí</Text>
+            <TouchableOpacity onPress={handleRegister} disabled={loading}>
+              <Text style={[styles.registerLink, loading && styles.linkDisabled]}>
+                Regístrate aquí
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -119,99 +160,96 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#E0D5F7",
+    backgroundColor: '#F8F9FA',
   },
   scrollContainer: {
     flexGrow: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 20,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 40,
   },
   logoContainer: {
-    marginBottom: 30,
+    alignItems: 'center',
+    marginBottom: 40,
   },
   logoImage: {
     width: 120,
     height: 120,
   },
   mainContent: {
-    alignItems: "center",
-    paddingHorizontal: 40,
-    width: "100%",
+    alignItems: 'center',
   },
   title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#000",
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#2C3E50',
     marginBottom: 10,
-    textAlign: "center",
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: "#666",
-    marginBottom: 30,
-    textAlign: "center",
-    lineHeight: 22,
+    color: '#7F8C8D',
+    textAlign: 'center',
+    marginBottom: 40,
+    paddingHorizontal: 20,
   },
   formContainer: {
-    width: "100%",
-    maxWidth: 300,
-    marginBottom: 20,
+    width: '100%',
+    maxWidth: 350,
   },
   input: {
-    backgroundColor: "white",
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    marginBottom: 15,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
     fontSize: 16,
+    marginBottom: 15,
     borderWidth: 1,
-    borderColor: "#E0E0E0",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
+    borderColor: '#E8EAED',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
   },
   loginButton: {
-    backgroundColor: "#4472C4",
-    paddingHorizontal: 40,
+    backgroundColor: '#4472C4',
+    borderRadius: 12,
     paddingVertical: 15,
-    borderRadius: 8,
-    width: "100%",
-    alignItems: "center",
+    alignItems: 'center',
     marginTop: 10,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowColor: '#4472C4',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  loginButtonDisabled: {
+    backgroundColor: '#BDC3C7',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   loginButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
   },
   registerContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 30,
   },
   registerText: {
-    fontSize: 14,
-    color: "#666",
-    marginRight: 5,
+    color: '#7F8C8D',
+    fontSize: 16,
   },
   registerLink: {
-    fontSize: 14,
-    color: "#4472C4",
-    fontWeight: "600",
-    textDecorationLine: "underline",
+    color: '#4472C4',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 5,
+  },
+  linkDisabled: {
+    color: '#BDC3C7',
   },
 });

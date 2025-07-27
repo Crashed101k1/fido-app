@@ -175,6 +175,11 @@ function CustomDrawerContent({ navigation, state }) {
             onPress={() => {
               if (item.screen === 'Login') {
                 handleLogout();
+              } else if (item.screen === 'TabNavigator') {
+                // Navegar al TabNavigator y específicamente a la pestaña Home
+                navigation.navigate('TabNavigator', { 
+                  screen: 'Home' 
+                });
               } else {
                 navigation.navigate(item.screen);
               }

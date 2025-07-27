@@ -22,16 +22,19 @@
  * - Expo Vector Icons: Iconografía consistente
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  TextInput
+  TextInput,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
 
 /**
  * Componente principal de la pantalla de cuenta de usuario
@@ -46,17 +49,28 @@ export default function AccountScreen({ navigation }) {
   
   /** Estado que controla si la información del usuario está en modo edición */
   const [isEditing, setIsEditing] = useState(false);
+  const { currentUser, userProfile, logout, updateUserProfile } = useAuth();
+  const [loading, setLoading] = useState(false);
   
   /** 
-   * Información del usuario actual
-   * En una aplicación real, esto vendría del contexto de autenticación
-   * o sería obtenido de una API tras el login
+   * Información del usuario actual - Se carga dinámicamente desde Firestore
    */
   const [userInfo, setUserInfo] = useState({
-    name: 'Usuario FIDO',
-    email: 'usuario@fido.com', // Campo de solo lectura por seguridad
-    phone: '+52 443 123 4567'
+    name: '',
+    email: '',
+    phone: ''
   });
+
+  // Efecto para actualizar userInfo cuando cambie userProfile
+  useEffect(() => {
+    if (userProfile && currentUser) {
+      setUserInfo({
+        name: userProfile.displayName || currentUser.displayName || 'Usuario FIDO',
+        email: userProfile.email || currentUser.email || '',
+        phone: userProfile.phone || ''
+      });
+    }
+  }, [userProfile, currentUser]);
 
   /** 
    * Lista de mascotas del usuario para mostrar resumen
@@ -82,14 +96,46 @@ export default function AccountScreen({ navigation }) {
 
   /**
    * Función para guardar los cambios realizados en el perfil
-   * Incluye validación y persistencia de datos
+   * Incluye validación y persistencia de datos en Firestore
    * @function handleSaveProfile
    * @returns {void}
    */
-  const handleSaveProfile = () => {
-    setIsEditing(false);
-    // En una aplicación real, aquí se enviarían los datos a la API
-    console.log('Guardando perfil:', userInfo);
+  const handleSaveProfile = async () => {
+    // Validar que el nombre no esté vacío
+    if (!userInfo.name.trim()) {
+      Alert.alert("Error", "El nombre no puede estar vacío");
+      return;
+    }
+
+    // Validar formato de teléfono básico
+    if (userInfo.phone && !userInfo.phone.match(/^\+?[\d\s\-\(\)]+$/)) {
+      Alert.alert("Error", "Por favor ingresa un número de teléfono válido");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Actualizar datos en Firestore
+      await updateUserProfile({
+        displayName: userInfo.name.trim(),
+        phone: userInfo.phone.trim()
+      });
+
+      setIsEditing(false);
+      
+      Alert.alert(
+        "Perfil Actualizado", 
+        "Tus datos han sido guardados exitosamente",
+        [{ text: "OK" }]
+      );
+      
+    } catch (error) {
+      Alert.alert("Error", "No se pudieron guardar los cambios. Intenta de nuevo.");
+      console.error('Error actualizando perfil:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   /**
@@ -98,9 +144,16 @@ export default function AccountScreen({ navigation }) {
    * @function handleLogout
    * @returns {void}
    */
-  const handleLogout = () => {
-    // En una aplicación real, aquí se limpiaría el contexto de autenticación
-    navigation.navigate('Login');
+  const handleLogout = async () => {
+    try {
+      setLoading(true);
+      await logout();
+      // La navegación se manejará automáticamente por el AuthContext
+    } catch (error) {
+      Alert.alert("Error", "No se pudo cerrar sesión");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ============ ESTRUCTURA DE RENDERIZADO ============
@@ -132,11 +185,14 @@ export default function AccountScreen({ navigation }) {
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>Información Personal</Text>
-                <TouchableOpacity onPress={handleEditProfile}>
+                <TouchableOpacity 
+                  onPress={isEditing ? handleSaveProfile : handleEditProfile}
+                  style={styles.editButton}
+                >
                   <Ionicons 
-                    name={isEditing ? "checkmark" : "pencil"} 
+                    name={isEditing ? "checkmark-circle" : "pencil"} 
                     size={20} 
-                    color="#4472C4" 
+                    color={isEditing ? "#4CAF50" : "#4472C4"} 
                   />
                 </TouchableOpacity>
               </View>
@@ -254,9 +310,25 @@ export default function AccountScreen({ navigation }) {
               </TouchableOpacity>
             )}
             
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={20} color="#FFF" />
-              <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
+            <TouchableOpacity 
+              style={[
+                styles.logoutButton, 
+                loading && styles.logoutButtonDisabled
+              ]} 
+              onPress={handleLogout}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <Text style={styles.logoutButtonText}>Cerrando Sesión...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="log-out-outline" size={20} color="#FFF" />
+                  <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -512,5 +584,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  logoutButtonDisabled: {
+    backgroundColor: '#BDBDBD',
+    opacity: 0.7,
+  },
+  editButton: {
+    padding: 5,
+    borderRadius: 15,
   },
 });
