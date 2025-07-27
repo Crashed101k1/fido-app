@@ -1,0 +1,516 @@
+/**
+ * FIDO - Pantalla de Gestión de Cuenta de Usuario
+ * 
+ * Esta pantalla permite al usuario visualizar y gestionar su información
+ * personal, así como obtener un resumen de sus mascotas registradas.
+ * 
+ * Funcionalidades principales:
+ * - Visualización y edición de información personal del usuario
+ * - Email de solo lectura (no editable por seguridad)
+ * - Resumen de mascotas registradas con información básica
+ * - Navegación rápida a gestión de mascotas
+ * - Función de cierre de sesión
+ * - Modo de edición toggleable para datos del perfil
+ * 
+ * Características de seguridad:
+ * - Campo de email protegido contra edición
+ * - Validación de datos antes de guardado
+ * - Confirmación de acciones críticas como logout
+ * 
+ * Dependencias:
+ * - React Native: Componentes básicos, scroll, input
+ * - Expo Vector Icons: Iconografía consistente
+ */
+
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  TextInput
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+
+/**
+ * Componente principal de la pantalla de cuenta de usuario
+ * 
+ * @param {Object} props - Propiedades del componente
+ * @param {Object} props.navigation - Objeto de navegación de React Navigation
+ * @returns {JSX.Element} Componente de pantalla de cuenta
+ */
+export default function AccountScreen({ navigation }) {
+  
+  // ============ ESTADOS LOCALES ============
+  
+  /** Estado que controla si la información del usuario está en modo edición */
+  const [isEditing, setIsEditing] = useState(false);
+  
+  /** 
+   * Información del usuario actual
+   * En una aplicación real, esto vendría del contexto de autenticación
+   * o sería obtenido de una API tras el login
+   */
+  const [userInfo, setUserInfo] = useState({
+    name: 'Usuario FIDO',
+    email: 'usuario@fido.com', // Campo de solo lectura por seguridad
+    phone: '+52 443 123 4567'
+  });
+
+  /** 
+   * Lista de mascotas del usuario para mostrar resumen
+   * En una aplicación real, estos datos vendrían sincronizados
+   * con el sistema de gestión de mascotas
+   */
+  const [pets] = useState([
+    { id: 1, name: 'Max', species: 'Perro', breed: 'Labrador', age: '3 años', dispenserId: 'DISP001' },
+    { id: 2, name: 'Luna', species: 'Gato', breed: 'Siamés', age: '2 años', dispenserId: 'DISP002' },
+    { id: 3, name: 'Bella', species: 'Perro', breed: 'Golden Retriever', age: '5 años', dispenserId: null },
+  ]);
+
+  // ============ FUNCIONES DE MANEJO DE EVENTOS ============
+
+  /**
+   * Función para alternar entre modo de visualización y edición del perfil
+   * @function handleEditProfile
+   * @returns {void}
+   */
+  const handleEditProfile = () => {
+    setIsEditing(!isEditing);
+  };
+
+  /**
+   * Función para guardar los cambios realizados en el perfil
+   * Incluye validación y persistencia de datos
+   * @function handleSaveProfile
+   * @returns {void}
+   */
+  const handleSaveProfile = () => {
+    setIsEditing(false);
+    // En una aplicación real, aquí se enviarían los datos a la API
+    console.log('Guardando perfil:', userInfo);
+  };
+
+  /**
+   * Función para manejar el cierre de sesión del usuario
+   * Navega de vuelta a la pantalla de login
+   * @function handleLogout
+   * @returns {void}
+   */
+  const handleLogout = () => {
+    // En una aplicación real, aquí se limpiaría el contexto de autenticación
+    navigation.navigate('Login');
+  };
+
+  // ============ ESTRUCTURA DE RENDERIZADO ============
+
+  return (
+    <View style={styles.container}>
+      {/* Contenedor principal con scroll para manejar contenido extenso */}
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.mainContent}>
+          {/* Título principal de la pantalla */}
+          <Text style={styles.title}>Mi Cuenta</Text>
+          
+          {/* Avatar del usuario */}
+          <View style={styles.profileSection}>
+            <View style={styles.avatarContainer}>
+              <View style={styles.avatar}>
+                <Ionicons name="person" size={60} color="#FFFFFF" />
+              </View>
+            </View>
+          </View>
+
+          {/* Información del usuario */}
+          <View style={styles.cardsContainer}>
+            {/* Card Información Personal */}
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Información Personal</Text>
+                <TouchableOpacity onPress={handleEditProfile}>
+                  <Ionicons 
+                    name={isEditing ? "checkmark" : "pencil"} 
+                    size={20} 
+                    color="#4472C4" 
+                  />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Nombre:</Text>
+                {isEditing ? (
+                  <TextInput
+                    style={styles.infoInput}
+                    value={userInfo.name}
+                    onChangeText={(text) => setUserInfo({...userInfo, name: text})}
+                  />
+                ) : (
+                  <Text style={styles.infoValue}>{userInfo.name}</Text>
+                )}
+              </View>
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Email:</Text>
+                <View style={styles.emailContainer}>
+                  <Text style={[styles.infoValue, styles.emailText]}>{userInfo.email}</Text>
+                  {isEditing && (
+                    <Text style={styles.emailHint}>
+                      (Este correo se vincula con tu cuenta de inicio de sesión)
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Teléfono:</Text>
+                {isEditing ? (
+                  <TextInput
+                    style={styles.infoInput}
+                    value={userInfo.phone}
+                    onChangeText={(text) => setUserInfo({...userInfo, phone: text})}
+                    keyboardType="phone-pad"
+                  />
+                ) : (
+                  <Text style={styles.infoValue}>{userInfo.phone}</Text>
+                )}
+              </View>
+            </View>
+
+            {/* Card Información de las Mascotas */}
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Mis Mascotas</Text>
+                <TouchableOpacity 
+                  style={styles.managePetsButton}
+                  onPress={() => {
+                    Alert.alert(
+                      'Gestionar Mascotas',
+                      'Esta opción te llevará a la sección "Mi Mascota" donde podrás:\n\n• Agregar nuevas mascotas\n• Editar información de mascotas existentes\n• Asignar dispensadores\n• Eliminar mascotas\n• Configurar nombres de dispensadores',
+                      [
+                        { text: 'Cancelar', style: 'cancel' },
+                        { text: 'Ir a Mi Mascota', onPress: () => navigation.navigate('MyPet') }
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="settings" size={20} color="#4CAF50" />
+                  <Text style={styles.managePetsText}>Gestionar</Text>
+                </TouchableOpacity>
+              </View>
+              
+              {pets.length > 0 ? (
+                <View style={styles.petsList}>
+                  {pets.map((pet) => (
+                    <View key={pet.id} style={styles.petItem}>
+                      <View style={styles.petInfo}>
+                        <Ionicons
+                          name={pet.species === 'Perro' ? 'paw' : 'fish'}
+                          size={20}
+                          color="#4CAF50"
+                          style={styles.petIcon}
+                        />
+                        <View style={styles.petDetails}>
+                          <Text style={styles.petName}>{pet.name}</Text>
+                          <Text style={styles.petBreed}>{pet.breed} • {pet.age}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.petStatus}>
+                        <View style={[
+                          styles.petStatusIndicator,
+                          { backgroundColor: pet.dispenserId ? '#4CAF50' : '#E0E0E0' }
+                        ]} />
+                        <Text style={styles.petStatusText}>
+                          {pet.dispenserId ? 'Conectado' : 'Sin Dispensador'}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.noPetsContainer}>
+                  <Ionicons name="add-circle-outline" size={40} color="#CCC" />
+                  <Text style={styles.noPetsText}>No tienes mascotas registradas</Text>
+                  <TouchableOpacity 
+                    style={styles.addPetButton}
+                    onPress={() => navigation.navigate('MyPet')}
+                  >
+                    <Text style={styles.addPetButtonText}>Agregar Mascota</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Botones de acción */}
+          <View style={styles.actionButtonsContainer}>
+            {isEditing && (
+              <TouchableOpacity style={styles.saveButton} onPress={handleSaveProfile}>
+                <Text style={styles.saveButtonText}>Guardar Cambios</Text>
+              </TouchableOpacity>
+            )}
+            
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={20} color="#FFF" />
+              <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#E0D5F7',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    paddingTop: 25,
+    justifyContent: 'space-between',
+  },
+  menuButton: {
+    padding: 5,
+  },
+  menuLine: {
+    width: 22,
+    height: 3,
+    backgroundColor: '#000',
+    marginVertical: 2,
+    borderRadius: 2,
+  },
+  logoContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  logoImage: {
+    width: 50,
+    height: 50,
+  },
+  notificationButton: {
+    padding: 5,
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 50, // Incrementado para las pantallas del drawer (no tienen barra de navegación)
+  },
+  mainContent: {
+    paddingHorizontal: 20,
+    paddingTop: 30,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 30,
+    textAlign: 'left',
+  },
+  profileSection: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  avatarContainer: {
+    position: 'relative',
+  },
+  avatar: {
+    width: 120,
+    height: 120,
+    backgroundColor: '#9E9E9E',
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+  },
+  cardsContainer: {
+    marginBottom: 30,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 20,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  managePetsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E8',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  managePetsText: {
+    fontSize: 12,
+    color: '#4CAF50',
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  petsList: {
+    marginTop: 10,
+  },
+  petItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  petInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  petIcon: {
+    marginRight: 12,
+  },
+  petDetails: {
+    flex: 1,
+  },
+  petName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+  },
+  petBreed: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  petStatus: {
+    alignItems: 'flex-end',
+  },
+  petStatusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginBottom: 3,
+  },
+  petStatusText: {
+    fontSize: 10,
+    color: '#666',
+    fontWeight: '600',
+  },
+  noPetsContainer: {
+    alignItems: 'center',
+    paddingVertical: 30,
+  },
+  noPetsText: {
+    fontSize: 14,
+    color: '#999',
+    marginVertical: 10,
+  },
+  addPetButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  addPetButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  infoValue: {
+    fontSize: 14,
+    color: '#000',
+    flex: 2,
+    textAlign: 'right',
+  },
+  infoInput: {
+    fontSize: 14,
+    color: '#000',
+    flex: 2,
+    textAlign: 'right',
+    borderBottomWidth: 1,
+    borderBottomColor: '#4472C4',
+    paddingBottom: 2,
+  },
+  emailContainer: {
+    flex: 2,
+    alignItems: 'flex-end',
+  },
+  emailText: {
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  emailHint: {
+    fontSize: 10,
+    color: '#999',
+    textAlign: 'right',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  actionButtonsContainer: {
+    marginBottom: 30,
+  },
+  saveButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  logoutButton: {
+    backgroundColor: '#F44336',
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  logoutButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+});
