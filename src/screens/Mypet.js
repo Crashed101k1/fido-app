@@ -24,7 +24,8 @@
  * - React Native Picker: Selector de especies
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { usePets } from '../hooks/usePets';
 import {
   View,
   Text,
@@ -33,7 +34,6 @@ import {
   Dimensions,
   ScrollView,
   TextInput,
-  Alert,
   Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -50,185 +50,153 @@ const { width, height } = Dimensions.get("window");
  * @returns {JSX.Element} Componente de pantalla de gestión de mascotas
  */
 export default function MyPetScreen({ navigation }) {
-  
-  // ============ ESTADOS LOCALES ============
-  
-  /** Índice de la mascota actualmente seleccionada en el carrusel */
+  const { pets, addPet, updatePet, deletePet } = usePets();
   const [selectedPetIndex, setSelectedPetIndex] = useState(0);
-  
-  /** Estado que controla si se está editando información de mascota */
   const [isEditing, setIsEditing] = useState(false);
-  
-  /** Control de visibilidad del modal para agregar nueva mascota */
   const [showAddPetModal, setShowAddPetModal] = useState(false);
-  
-  /** Control de visibilidad del modal de selección de dispensadores */
   const [showDispensersModal, setShowDispensersModal] = useState(false);
-  
-  /** Control de visibilidad del modal de configuración de dispensador */
   const [showDispenserConfigModal, setShowDispenserConfigModal] = useState(false);
-  
-  /** Dispensador seleccionado para configuración */
   const [selectedDispenser, setSelectedDispenser] = useState(null);
-  
-  /** Nombre personalizado para el dispensador en configuración */
   const [dispenserConfigName, setDispenserConfigName] = useState('');
-  
-  /** 
-   * Lista de mascotas del usuario con información completa
-   * Incluye datos de la mascota y configuración de dispensador asociado
-   */
-  const [pets, setPets] = useState([
-    {
-      id: 1,
-      name: "FIDO",
-      species: "Perro",
-      age: "5 años",
-      weight: "15 kg",
-      gender: "Macho",
-      dispenserId: "DISP-001",
-      dispenserName: "Dispensador Cocina"
-    },
-    {
-      id: 2,
-      name: "Luna",
-      species: "Gato",
-      age: "3 años",
-      weight: "5 kg",
-      gender: "Hembra",
-      dispenserId: null,
-      dispenserName: "Sin asignar"
-    }
-  ]);
-
-  /** Lista de dispensadores disponibles para asignación */
-  const [availableDispensers, setAvailableDispensers] = useState([
-    { id: "DISP-001", name: "Dispensador Cocina", status: "Conectado" },
-    { id: "DISP-002", name: "Dispensador Jardín", status: "Conectado" },
-    { id: "DISP-003", name: "Dispensador Sala", status: "Desconectado" },
-  ]);
-
   const [newPet, setNewPet] = useState({
     name: "",
     species: "Perro",
-    age: "1 año",
-    weight: "1-5 kg",
-    gender: "Macho",
+    breed: "",
+    gender: "",
     dispenserId: null,
     dispenserName: "Sin asignar"
   });
+  const [editingPet, setEditingPet] = useState({});
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState('success'); // 'success' | 'error' | 'confirm'
+  const [modalMessage, setModalMessage] = useState('');
+  const availableDispensers = [
+    { id: "DISP-001", name: "Dispensador Cocina", status: "Conectado" },
+    { id: "DISP-002", name: "Dispensador Jardín", status: "Conectado" },
+    { id: "DISP-003", name: "Dispensador Sala", status: "Desconectado" },
+  ];
+  const currentPet = pets[selectedPetIndex] || null;
 
-  const currentPet = pets[selectedPetIndex] || pets[0];
+  // Efectos
+  useEffect(() => {
+    if (pets.length > 0 && pets[selectedPetIndex]) {
+      setEditingPet({ ...pets[selectedPetIndex] });
+    }
+  }, [selectedPetIndex, pets]);
+  useEffect(() => {
+    if (selectedPetIndex >= pets.length && pets.length > 0) {
+      setSelectedPetIndex(pets.length - 1);
+    }
+  }, [pets.length, selectedPetIndex]);
 
-  const handleSave = () => {
-    setPets(prev => prev.map((pet, index) => 
-      index === selectedPetIndex ? currentPet : pet
-    ));
-    setIsEditing(false);
-    Alert.alert(
-      "Información Guardada",
-      "Los datos de tu mascota han sido actualizados exitosamente."
-    );
+  // Handlers
+  const showSimpleModal = (type, message) => {
+    setModalType(type);
+    setModalMessage(message);
+    setModalVisible(true);
   };
-
-  const handleEdit = () => {
-    setIsEditing(true);
+  const handleSave = async () => {
+    if (!currentPet) return;
+    try {
+      await updatePet(currentPet.id, editingPet);
+      setIsEditing(false);
+      showSimpleModal('success', 'Los datos de tu mascota han sido actualizados exitosamente.');
+    } catch {
+      showSimpleModal('error', 'No se pudieron guardar los cambios.');
+    }
   };
-
-  const updatePetInfo = (field, value) => {
-    setPets(prev => prev.map((pet, index) => 
-      index === selectedPetIndex ? { ...pet, [field]: value } : pet
-    ));
-  };
-
-  const addNewPet = () => {
+  const handleEdit = () => setIsEditing(true);
+  const updateEditingPetField = (field, value) => setEditingPet(prev => ({ ...prev, [field]: value }));
+  const handleAddNewPet = async () => {
     if (!newPet.name.trim()) {
-      Alert.alert("Error", "Por favor ingresa el nombre de la mascota");
+      showSimpleModal('error', 'Por favor ingresa el nombre de la mascota');
       return;
     }
-    
-    const petToAdd = {
-      ...newPet,
-      id: Date.now(),
-    };
-    
-    setPets(prev => [...prev, petToAdd]);
-    setNewPet({
-      name: "",
-      species: "Perro",
-      age: "1 año",
-      weight: "1-5 kg",
-      gender: "Macho",
-      dispenserId: null,
-      dispenserName: "Sin asignar"
-    });
-    setShowAddPetModal(false);
-    setSelectedPetIndex(pets.length); // Seleccionar la nueva mascota
-    Alert.alert("Éxito", "Mascota agregada exitosamente");
+    try {
+      await addPet({
+        name: newPet.name,
+        species: newPet.species,
+        breed: (newPet.species === "Perro" || newPet.species === "Gato") ? newPet.breed : "",
+        age: "",
+        weight: "",
+        gender: "",
+        dispenserId: null,
+        dispenserName: "Sin asignar"
+      });
+      setNewPet({
+        name: "",
+        species: "Perro",
+        breed: "",
+        age: "",
+        weight: "",
+        gender: "",
+        dispenserId: null,
+        dispenserName: "Sin asignar"
+      });
+      setShowAddPetModal(false);
+      setSelectedPetIndex(pets.length);
+      showSimpleModal('success', 'Mascota agregada exitosamente. Ahora termina de completar la información de tu mascota.');
+    } catch {
+      showSimpleModal('error', 'No se pudo agregar la mascota.');
+    }
   };
-
-  const deletePet = () => {
+  const handleDeletePet = async () => {
+    if (!currentPet) {
+      console.log("No hay mascota seleccionada para eliminar");
+      return;
+    }
     if (pets.length <= 1) {
-      Alert.alert("Error", "Debes tener al menos una mascota registrada");
+      console.log("Intento de eliminar la última mascota");
+      showSimpleModal('error', 'Debes tener al menos una mascota registrada');
       return;
     }
-    
-    Alert.alert(
-      "Confirmar eliminación",
-      `¿Estás seguro de que deseas eliminar a ${currentPet.name}?`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Eliminar",
-          style: "destructive",
-          onPress: () => {
-            setPets(prev => prev.filter((_, index) => index !== selectedPetIndex));
-            setSelectedPetIndex(0);
-          }
-        }
-      ]
-    );
+    console.log("Intentando eliminar mascota:", currentPet.id, currentPet.name);
+    setModalType('confirm');
+    setModalMessage(`¿Estás seguro de que deseas eliminar a ${currentPet.name}?`);
+    setModalVisible(true);
   };
-
-  const assignDispenser = (dispenserId, dispenserName) => {
-    updatePetInfo('dispenserId', dispenserId);
-    updatePetInfo('dispenserName', dispenserName);
-    setShowDispensersModal(false);
-  };
-
+  const assignDispenser = (_, __) => setShowDispensersModal(false);
   const openDispenserConfig = (dispenser) => {
     setSelectedDispenser(dispenser);
     setDispenserConfigName(dispenser.name);
     setShowDispenserConfigModal(true);
   };
-
   const saveDispenserConfig = () => {
-    if (!dispenserConfigName.trim()) {
-      Alert.alert("Error", "Por favor ingresa un nombre para el dispensador");
-      return;
-    }
-
-    // Actualizar el nombre del dispensador
-    setAvailableDispensers(prev => 
-      prev.map(dispenser => 
-        dispenser.id === selectedDispenser.id 
-          ? { ...dispenser, name: dispenserConfigName.trim() }
-          : dispenser
-      )
-    );
-
-    // Actualizar el nombre en las mascotas que usan este dispensador
-    setPets(prev => 
-      prev.map(pet => 
-        pet.dispenserId === selectedDispenser.id 
-          ? { ...pet, dispenserName: dispenserConfigName.trim() }
-          : pet
-      )
-    );
-
     setShowDispenserConfigModal(false);
-    Alert.alert("Éxito", "Nombre del dispensador actualizado");
+    showSimpleModal('success', 'Nombre del dispensador actualizado (solo visual)');
   };
+
+  // Render auxiliar para campos del formulario
+  const renderFormField = ({ icon, color, label, value, onChange, editable, pickerItems, placeholder }) => (
+    <View style={styles.formRowModern}>
+      <Ionicons name={icon} size={22} color={color} style={styles.formIcon} />
+      <View style={styles.inputContainerModern}>
+        <Text style={styles.inputLabelModern}>{label}</Text>
+        {editable ? (
+          pickerItems ? (
+            <Picker
+              selectedValue={value}
+              style={styles.pickerModern}
+              onValueChange={onChange}
+            >
+              {pickerItems.map(item => (
+                <Picker.Item key={item.value} label={item.label} value={item.value} />
+              ))}
+            </Picker>
+          ) : (
+            <TextInput
+              style={[styles.textInputModern, { borderColor: color }]}
+              value={value}
+              onChangeText={onChange}
+              placeholder={placeholder}
+            />
+          )
+        ) : (
+          <Text style={styles.displayTextModern}>{value}</Text>
+        )}
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -240,222 +208,258 @@ export default function MyPetScreen({ navigation }) {
         <View style={styles.mainContent}>
           <Text style={styles.title}>Mis Mascotas</Text>
 
-          {/* Selector de Mascotas */}
-          <View style={styles.petSelectorContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {pets.map((pet, index) => (
-                <TouchableOpacity
-                  key={pet.id}
-                  style={[
-                    styles.petCard,
-                    selectedPetIndex === index && styles.petCardSelected
-                  ]}
-                  onPress={() => setSelectedPetIndex(index)}
-                >
-                  <View style={styles.petCardAvatar}>
-                    <Ionicons 
-                      name="paw" 
-                      size={30} 
-                      color={selectedPetIndex === index ? "#FFFFFF" : "#4CAF50"} 
-                    />
-                  </View>
-                  <Text style={[
-                    styles.petCardName,
-                    selectedPetIndex === index && styles.petCardNameSelected
-                  ]}>
-                    {pet.name}
-                  </Text>
-                  <Text style={[
-                    styles.petCardSpecies,
-                    selectedPetIndex === index && styles.petCardSpeciesSelected
-                  ]}>
-                    {pet.species}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-              
-              {/* Botón Agregar Mascota */}
+          {/* Si no hay mascotas, mostrar aviso y botón */}
+          {(!pets || pets.length === 0) ? (
+            <View style={{ alignItems: 'center', marginTop: 40 }}>
+              <Text style={{ fontSize: 18, color: '#666', marginBottom: 20 }}>
+                ¡No tienes mascotas registradas!
+              </Text>
               <TouchableOpacity
                 style={styles.addPetCard}
                 onPress={() => setShowAddPetModal(true)}
               >
                 <Ionicons name="add-circle" size={40} color="#4CAF50" />
-                <Text style={styles.addPetText}>Agregar</Text>
+                <Text style={styles.addPetText}>Agregar mi primera mascota</Text>
               </TouchableOpacity>
-            </ScrollView>
-          </View>
-
-          {/* Información de la Mascota Seleccionada */}
-          <View style={styles.formContainer}>
-            {/* Header con Avatar y Acciones */}
-            <View style={styles.petHeader}>
-              <View style={styles.petAvatarContainer}>
-                <View style={styles.petAvatar}>
-                  <Ionicons name="paw" size={60} color="#000" />
-                </View>
-              </View>
-              
-              <View style={styles.petHeaderActions}>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => setShowDispensersModal(true)}
-                >
-                  <Ionicons name="hardware-chip" size={20} color="#4CAF50" />
-                  <Text style={styles.actionButtonText}>Dispensador</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.deleteButton]}
-                  onPress={deletePet}
-                >
-                  <Ionicons name="trash" size={20} color="#FF5252" />
-                  <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Eliminar</Text>
-                </TouchableOpacity>
-              </View>
             </View>
-
-            {/* Información del Dispensador */}
-            <View style={styles.dispenserInfo}>
-              <View style={styles.dispenserHeader}>
-                <Ionicons name="hardware-chip" size={24} color="#4CAF50" />
-                <Text style={styles.dispenserTitle}>Dispensador Asignado</Text>
+          ) : (
+            <>
+              {/* Selector de Mascotas */}
+              <View style={styles.petSelectorContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {pets.map((pet, index) => (
+                    <TouchableOpacity
+                      key={pet.id}
+                      style={[
+                        styles.petCard,
+                        selectedPetIndex === index && styles.petCardSelected
+                      ]}
+                      onPress={() => setSelectedPetIndex(index)}
+                    >
+                      <View style={styles.petCardAvatar}>
+                        <Ionicons 
+                          name="paw" 
+                          size={30} 
+                          color={selectedPetIndex === index ? "#FFFFFF" : "#4CAF50"} 
+                        />
+                      </View>
+                      <Text style={[
+                        styles.petCardName,
+                        selectedPetIndex === index && styles.petCardNameSelected
+                      ]}>
+                        {pet.name}
+                      </Text>
+                      <Text style={[
+                        styles.petCardSpecies,
+                        selectedPetIndex === index && styles.petCardSpeciesSelected
+                      ]}>
+                        {pet.species}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  {/* Botón Agregar Mascota */}
+                  <TouchableOpacity
+                    style={styles.addPetCard}
+                    onPress={() => setShowAddPetModal(true)}
+                  >
+                    <Ionicons name="add-circle" size={40} color="#4CAF50" />
+                    <Text style={styles.addPetText}>Agregar</Text>
+                  </TouchableOpacity>
+                </ScrollView>
               </View>
-              <View style={styles.dispenserDetails}>
-                <Text style={styles.dispenserName}>
-                  {currentPet.dispenserName}
-                </Text>
-                {currentPet.dispenserId && (
-                  <View style={styles.dispenserStatus}>
-                    <View style={styles.statusDot} />
-                    <Text style={styles.statusText}>Conectado</Text>
+
+              {/* Información de la Mascota Seleccionada */}
+              <View style={styles.formContainer}>
+                {/* Header con Avatar y Acciones */}
+                <View style={styles.petHeader}>
+                  <View style={styles.petAvatarContainer}>
+                    <View style={styles.petAvatar}>
+                      <Ionicons name="paw" size={60} color="#000" />
+                    </View>
+                  </View>
+                  
+                  <View style={styles.petHeaderActions}>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => setShowDispensersModal(true)}
+                    >
+                      <Ionicons name="hardware-chip" size={20} color="#4CAF50" />
+                      <Text style={styles.actionButtonText}>Dispensador</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.deleteButton]}
+                      onPress={() => {
+                        if (!currentPet) return;
+                        setModalType('confirm');
+                        setModalMessage(`¿Estás seguro de que deseas eliminar a ${currentPet.name}?`);
+                        setModalVisible(true);
+                      }}
+                    >
+                      <Ionicons name="trash" size={20} color="#FF5252" />
+                      <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Eliminar mascota</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Información del Dispensador */}
+                <View style={styles.dispenserInfo}>
+                  <View style={styles.dispenserHeader}>
+                    <Ionicons name="hardware-chip" size={24} color="#4CAF50" />
+                    <Text style={styles.dispenserTitle}>Dispensador Asignado</Text>
+                  </View>
+                  <View style={styles.dispenserDetails}>
+                    <Text style={styles.dispenserName}>
+                      {currentPet.dispenserName}
+                    </Text>
+                    {currentPet.dispenserId && (
+                      <View style={styles.dispenserStatus}>
+                        <View style={styles.statusDot} />
+                        <Text style={styles.statusText}>Conectado</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                {/* Formulario visualmente mejorado y optimizado */}
+                <View style={styles.formGridModern}>
+                  <View style={styles.formSectionHeader}>
+                    <Ionicons name="paw" size={28} color="#7C3AED" style={{ marginRight: 10 }} />
+                    <Text style={styles.formSectionTitle}>Datos de la Mascota</Text>
+                  </View>
+                  {renderFormField({
+                    icon: "person",
+                    color: "#4CAF50",
+                    label: "Nombre",
+                    value: editingPet.name ?? "",
+                    onChange: text => updateEditingPetField("name", text),
+                    editable: isEditing,
+                    placeholder: "Nombre de la mascota"
+                  })}
+                  <View style={styles.formSeparator} />
+                  {renderFormField({
+                    icon: "leaf",
+                    color: "#7C3AED",
+                    label: "Especie",
+                    value: editingPet.species ?? "",
+                    onChange: value => updateEditingPetField("species", value),
+                    editable: isEditing,
+                    pickerItems: [
+                      { label: "Selecciona especie...", value: "" },
+                      { label: "Perro", value: "Perro" },
+                      { label: "Gato", value: "Gato" },
+                      { label: "Conejo", value: "Conejo" },
+                      { label: "Hamster", value: "Hamster" }
+                    ]
+                  })}
+                  {(editingPet.species === "Perro" || editingPet.species === "Gato") && (
+                    <>
+                      <View style={styles.formSeparator} />
+                      {renderFormField({
+                        icon: "medal",
+                        color: "#F59E42",
+                        label: "Raza",
+                        value: editingPet.breed ?? "",
+                        onChange: text => updateEditingPetField("breed", text),
+                        editable: isEditing,
+                        placeholder: editingPet.species === "Perro" ? "Raza del perro" : "Raza del gato"
+                      })}
+                    </>
+                  )}
+                  <View style={styles.formSeparator} />
+                  {renderFormField({
+                    icon: "male-female",
+                    color: "#E91E63",
+                    label: "Sexo",
+                    value: editingPet.gender ?? "",
+                    onChange: value => updateEditingPetField("gender", value),
+                    editable: isEditing,
+                    pickerItems: [
+                      { label: "Selecciona sexo...", value: "" },
+                      { label: "Macho", value: "Macho" },
+                      { label: "Hembra", value: "Hembra" }
+                    ]
+                  })}
+                  <View style={styles.formSeparator} />
+                  {renderFormField({
+                    icon: "calendar",
+                    color: "#2196F3",
+                    label: "Edad",
+                    value: editingPet.age ?? "",
+                    onChange: value => updateEditingPetField("age", value),
+                    editable: isEditing,
+                    pickerItems: [
+                      { label: "Selecciona edad...", value: "" },
+                      { label: "1 año", value: "1 año" },
+                      { label: "2 años", value: "2 años" },
+                      { label: "3 años", value: "3 años" },
+                      { label: "4 años", value: "4 años" },
+                      { label: "5 años", value: "5 años" },
+                      { label: "6 años", value: "6 años" },
+                      { label: "7 años", value: "7 años" },
+                      { label: "8 años", value: "8 años" },
+                      { label: "9 años", value: "9 años" },
+                      { label: "10+ años", value: "10+ años" }
+                    ]
+                  })}
+                  <View style={styles.formSeparator} />
+                  {renderFormField({
+                    icon: "barbell",
+                    color: "#00BCD4",
+                    label: "Peso",
+                    value: editingPet.weight ?? "",
+                    onChange: value => updateEditingPetField("weight", value),
+                    editable: isEditing,
+                    pickerItems: [
+                      { label: "Selecciona peso...", value: "" },
+                      { label: "1-5 kg", value: "1-5 kg" },
+                      { label: "5-10 kg", value: "5-10 kg" },
+                      { label: "10-15 kg", value: "10-15 kg" },
+                      { label: "15 kg", value: "15 kg" },
+                      { label: "20-25 kg", value: "20-25 kg" },
+                      { label: "25-30 kg", value: "25-30 kg" },
+                      { label: "30+ kg", value: "30+ kg" }
+                    ]
+                  })}
+                </View>
+
+                {/* Aviso para completar información si hay campos vacíos */}
+                {(
+                  !editingPet.name ||
+                  !editingPet.species ||
+                  ((editingPet.species === "Perro" || editingPet.species === "Gato") && !editingPet.breed) ||
+                  !editingPet.age ||
+                  !editingPet.weight ||
+                  !editingPet.gender
+                ) && (
+                  <View style={{ marginBottom: 15, alignItems: 'center' }}>
+                    <Text style={{ color: '#FF9800', fontWeight: 'bold' }}>
+                      Termina de completar la información de tu mascota
+                    </Text>
                   </View>
                 )}
-              </View>
-            </View>
 
-            {/* Campos del formulario */}
-            <View style={styles.formGrid}>
-              {/* Nombre y Especie */}
-              <View style={styles.formRow}>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Nombre:</Text>
+                {/* Botones */}
+                <View style={styles.buttonContainer}>
                   {isEditing ? (
-                    <TextInput
-                      style={styles.textInput}
-                      value={currentPet.name}
-                      onChangeText={(text) => updatePetInfo("name", text)}
-                    />
-                  ) : (
-                    <Text style={styles.displayText}>{currentPet.name}</Text>
-                  )}
-                </View>
-
-                <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Especie:</Text>
-                  {isEditing ? (
-                    <Picker
-                      selectedValue={currentPet.species}
-                      style={styles.picker}
-                      onValueChange={(value) => updatePetInfo("species", value)}
+                    <TouchableOpacity
+                      style={styles.saveButton}
+                      onPress={handleSave}
                     >
-                      <Picker.Item label="Perro" value="Perro" />
-                      <Picker.Item label="Gato" value="Gato" />
-                      <Picker.Item label="Conejo" value="Conejo" />
-                      <Picker.Item label="Hamster" value="Hamster" />
-                    </Picker>
+                      <Text style={styles.saveButtonText}>Guardar</Text>
+                    </TouchableOpacity>
                   ) : (
-                    <Text style={styles.displayText}>{currentPet.species}</Text>
+                    <TouchableOpacity
+                      style={styles.editButton}
+                      onPress={handleEdit}
+                    >
+                      <Text style={styles.editButtonText}>Editar</Text>
+                    </TouchableOpacity>
                   )}
                 </View>
               </View>
-
-              {/* Edad y Peso */}
-              <View style={styles.formRow}>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Edad:</Text>
-                  {isEditing ? (
-                    <Picker
-                      selectedValue={currentPet.age}
-                      style={styles.picker}
-                      onValueChange={(value) => updatePetInfo("age", value)}
-                    >
-                      <Picker.Item label="1 año" value="1 año" />
-                      <Picker.Item label="2 años" value="2 años" />
-                      <Picker.Item label="3 años" value="3 años" />
-                      <Picker.Item label="4 años" value="4 años" />
-                      <Picker.Item label="5 años" value="5 años" />
-                      <Picker.Item label="6 años" value="6 años" />
-                      <Picker.Item label="7 años" value="7 años" />
-                      <Picker.Item label="8 años" value="8 años" />
-                      <Picker.Item label="9 años" value="9 años" />
-                      <Picker.Item label="10+ años" value="10+ años" />
-                    </Picker>
-                  ) : (
-                    <Text style={styles.displayText}>{currentPet.age}</Text>
-                  )}
-                </View>
-
-                <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Peso:</Text>
-                  {isEditing ? (
-                    <Picker
-                      selectedValue={currentPet.weight}
-                      style={styles.picker}
-                      onValueChange={(value) => updatePetInfo("weight", value)}
-                    >
-                      <Picker.Item label="1-5 kg" value="1-5 kg" />
-                      <Picker.Item label="5-10 kg" value="5-10 kg" />
-                      <Picker.Item label="10-15 kg" value="10-15 kg" />
-                      <Picker.Item label="15 kg" value="15 kg" />
-                      <Picker.Item label="20-25 kg" value="20-25 kg" />
-                      <Picker.Item label="25-30 kg" value="25-30 kg" />
-                      <Picker.Item label="30+ kg" value="30+ kg" />
-                    </Picker>
-                  ) : (
-                    <Text style={styles.displayText}>{currentPet.weight}</Text>
-                  )}
-                </View>
-              </View>
-
-              {/* Sexo */}
-              <View style={styles.formRow}>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Sexo:</Text>
-                  {isEditing ? (
-                    <Picker
-                      selectedValue={currentPet.gender}
-                      style={styles.picker}
-                      onValueChange={(value) => updatePetInfo("gender", value)}
-                    >
-                      <Picker.Item label="Macho" value="Macho" />
-                      <Picker.Item label="Hembra" value="Hembra" />
-                    </Picker>
-                  ) : (
-                    <Text style={styles.displayText}>{currentPet.gender}</Text>
-                  )}
-                </View>
-              </View>
-            </View>
-
-            {/* Botones */}
-            <View style={styles.buttonContainer}>
-              {isEditing ? (
-                <TouchableOpacity
-                  style={styles.saveButton}
-                  onPress={handleSave}
-                >
-                  <Text style={styles.saveButtonText}>Guardar</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={styles.editButton}
-                  onPress={handleEdit}
-                >
-                  <Text style={styles.editButtonText}>Editar</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
+            </>
+          )}
         </View>
       </ScrollView>
 
@@ -464,20 +468,18 @@ export default function MyPetScreen({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Agregar Nueva Mascota</Text>
-            
             <TextInput
               style={styles.modalInput}
               placeholder="Nombre de la mascota"
               value={newPet.name}
               onChangeText={(text) => setNewPet(prev => ({...prev, name: text}))}
             />
-            
             <View style={styles.modalPickerContainer}>
               <Text style={styles.modalLabel}>Especie:</Text>
               <Picker
                 selectedValue={newPet.species}
                 style={styles.modalPicker}
-                onValueChange={(value) => setNewPet(prev => ({...prev, species: value}))}
+                onValueChange={(value) => setNewPet(prev => ({...prev, species: value, breed: ""}))}
               >
                 <Picker.Item label="Perro" value="Perro" />
                 <Picker.Item label="Gato" value="Gato" />
@@ -485,7 +487,15 @@ export default function MyPetScreen({ navigation }) {
                 <Picker.Item label="Hamster" value="Hamster" />
               </Picker>
             </View>
-
+            {/* Campo raza solo si es perro o gato */}
+            {(newPet.species === "Perro" || newPet.species === "Gato") && (
+              <TextInput
+                style={styles.modalInput}
+                placeholder={newPet.species === "Perro" ? "Raza del perro" : "Raza del gato"}
+                value={newPet.breed}
+                onChangeText={(text) => setNewPet(prev => ({...prev, breed: text}))}
+              />
+            )}
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.modalCancelButton}
@@ -495,7 +505,7 @@ export default function MyPetScreen({ navigation }) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalSaveButton}
-                onPress={addNewPet}
+                onPress={handleAddNewPet}
               >
                 <Text style={styles.modalSaveText}>Agregar</Text>
               </TouchableOpacity>
@@ -604,6 +614,60 @@ export default function MyPetScreen({ navigation }) {
                 <Text style={styles.modalSaveText}>Guardar</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Simple para mensajes y confirmaciones */}
+      <Modal visible={modalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { alignItems: 'center', justifyContent: 'center', paddingTop: 30, paddingBottom: 30 }]}>  
+            {modalType === 'confirm' ? (
+              <>
+                <Ionicons name="alert" size={48} color="#F59E42" style={{ marginBottom: 10 }} />
+                <Text style={[styles.modalTitle, { marginBottom: 10 }]}>{modalMessage}</Text>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={styles.modalCancelButton}
+                    onPress={() => setModalVisible(false)}
+                  >
+                    <Text style={styles.modalCancelText}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.modalSaveButton}
+                    onPress={async () => {
+                      setModalVisible(false);
+                      try {
+                        await deletePet(currentPet.id);
+                        setSelectedPetIndex(0);
+                        showSimpleModal('success', `${currentPet.name} ha sido eliminada exitosamente.`);
+                      } catch {
+                        showSimpleModal('error', 'No se pudo eliminar la mascota.');
+                      }
+                    }}
+                  >
+                    <Text style={styles.modalSaveText}>Eliminar</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Ionicons 
+                  name={modalType === 'success' ? 'checkmark-circle' : 'close-circle'} 
+                  size={56} 
+                  color={modalType === 'success' ? '#4CAF50' : '#FF5252'} 
+                  style={{ marginBottom: 10 }} 
+                />
+                <Text style={[styles.modalTitle, { color: modalType === 'success' ? '#4CAF50' : '#FF5252', marginBottom: 10 }]}>{modalType === 'success' ? '¡Éxito!' : 'Error'}</Text>
+                <Text style={{ fontSize: 16, color: '#333', marginBottom: 24, textAlign: 'center', fontWeight: '500' }}>{modalMessage}</Text>
+                <TouchableOpacity
+                  style={styles.modalSaveButton}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.modalSaveText}>Aceptar</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -791,23 +855,85 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // Formulario
-  formGrid: { marginBottom: 30 },
-  formRow: { flexDirection: "row", marginBottom: 25 },
-  inputContainer: { flex: 1, marginHorizontal: 5 },
-  inputLabel: { fontSize: 16, fontWeight: "bold", color: "#000", marginBottom: 8 },
-  textInput: {
-    backgroundColor: "#F5F5F5",
+  // Formulario Moderno
+  formGridModern: {
+    marginBottom: 30,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 18,
+    padding: 18,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
     borderWidth: 2,
-    borderColor: "#000",
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#000",
+    borderColor: '#7C3AED',
   },
-  displayText: { fontSize: 16, color: "#000", paddingVertical: 12 },
-  picker: { backgroundColor: "#F5F5F5", borderRadius: 8 },
+  formSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    paddingBottom: 8,
+  },
+  formSectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#7C3AED',
+  },
+  formRowModern: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 18,
+    gap: 10,
+  },
+  formIcon: {
+    marginRight: 8,
+    backgroundColor: '#F3F0FF',
+    borderRadius: 8,
+    padding: 6,
+  },
+  inputContainerModern: {
+    flex: 1,
+    marginHorizontal: 5,
+  },
+  inputLabelModern: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 6,
+  },
+  textInputModern: {
+    backgroundColor: '#F5F5F5',
+    borderWidth: 2,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#222',
+    marginBottom: 2,
+  },
+  displayTextModern: {
+    fontSize: 15,
+    color: '#222',
+    paddingVertical: 10,
+    marginBottom: 2,
+  },
+  pickerModern: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    minHeight: 44,
+    marginBottom: 2,
+  },
+  formSeparator: {
+    height: 1,
+    backgroundColor: '#E0E0E0',
+    marginVertical: 6,
+    borderRadius: 1,
+  },
 
   // Botones
   buttonContainer: { alignItems: "center" },
@@ -854,11 +980,12 @@ const styles = StyleSheet.create({
     minHeight: height * 0.4,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "bold",
     color: "#000",
     textAlign: "center",
     marginBottom: 20,
+    letterSpacing: 0.5,
   },
   modalInput: {
     backgroundColor: "#F5F5F5",
