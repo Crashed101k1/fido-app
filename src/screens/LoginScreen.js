@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Toast from '../components/Toast';
 import {
   View,
   Text,
@@ -18,18 +19,28 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'info' });
   const { login } = useAuth();
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert("Error", "Por favor ingresa tu email y contraseña");
+      setToast({ visible: true, message: 'Por favor ingresa tu email y contraseña', type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '', type: 'info' }), 2500);
       return;
     }
 
-    // Validación básica de email
+    // Validación de email (sin espacios, formato correcto)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      Alert.alert("Error", "Por favor ingresa un email válido");
+    if (!emailRegex.test(email) || email.includes(' ')) {
+      setToast({ visible: true, message: 'Por favor ingresa un email válido y sin espacios', type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '', type: 'info' }), 2500);
+      return;
+    }
+
+    // Validar que la contraseña no tenga espacios
+    if (password.includes(' ')) {
+      setToast({ visible: true, message: 'La contraseña no debe contener espacios', type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '', type: 'info' }), 2500);
       return;
     }
 
@@ -38,29 +49,28 @@ export default function LoginScreen({ navigation }) {
       await login(email, password);
       // La navegación se manejará automáticamente por el AuthContext
     } catch (error) {
-      let errorMessage = "Error al iniciar sesión";
-      
+      let errorMessage = "No se pudo iniciar sesión.";
       switch (error.code) {
         case 'auth/user-not-found':
-          errorMessage = "No existe una cuenta con este correo electrónico";
+          errorMessage = "No existe una cuenta con este correo. Regístrate primero.";
           break;
         case 'auth/wrong-password':
-          errorMessage = "Contraseña incorrecta";
+          errorMessage = "La contraseña es incorrecta. Intenta de nuevo.";
           break;
         case 'auth/invalid-email':
-          errorMessage = "Correo electrónico inválido";
+          errorMessage = "El correo ingresado no es válido. Verifica el formato.";
           break;
         case 'auth/user-disabled':
-          errorMessage = "Esta cuenta ha sido deshabilitada";
+          errorMessage = "Tu cuenta ha sido deshabilitada. Contacta soporte si es un error.";
           break;
         case 'auth/too-many-requests':
-          errorMessage = "Demasiados intentos fallidos. Intenta más tarde";
+          errorMessage = "Demasiados intentos fallidos. Espera unos minutos e intenta de nuevo.";
           break;
         default:
-          errorMessage = error.message;
+          errorMessage = "No se pudo iniciar sesión. Verifica tus datos o intenta más tarde.";
       }
-      
-      Alert.alert("Error", errorMessage);
+      setToast({ visible: true, message: errorMessage, type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '', type: 'info' }), 2500);
     } finally {
       setLoading(false);
     }
@@ -80,6 +90,7 @@ export default function LoginScreen({ navigation }) {
       style={styles.container} 
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
+      <Toast visible={toast.visible} message={toast.message} type={toast.type} />
       <ScrollView 
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"

@@ -1,4 +1,9 @@
 import React, { useState } from 'react';
+import emailjs from 'emailjs-com';
+import { sendContactEmail } from '../utils/sendEmail';
+import { Modal } from 'react-native';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
 import {
   View,
   Text,
@@ -16,47 +21,63 @@ export default function ContactScreen({ navigation }) {
     email: '',
     message: ''
   });
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
 
   const handleSendMessage = () => {
     // Validar campos
     if (!formData.name.trim()) {
-      Alert.alert('Error', 'Por favor ingresa tu nombre');
+      setModalMessage('Por favor ingresa tu nombre');
+      setModalVisible(true);
       return;
     }
     if (!formData.email.trim()) {
-      Alert.alert('Error', 'Por favor ingresa tu correo electrónico');
+      setModalMessage('Por favor ingresa tu correo electrónico');
+      setModalVisible(true);
       return;
     }
     if (!formData.message.trim()) {
-      Alert.alert('Error', 'Por favor escribe tu mensaje');
+      setModalMessage('Por favor escribe tu mensaje');
+      setModalVisible(true);
       return;
     }
 
     // Validar formato de email básico
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
-      Alert.alert('Error', 'Por favor ingresa un correo electrónico válido');
+      setModalMessage('Por favor ingresa un correo electrónico válido');
+      setModalVisible(true);
       return;
     }
 
-    // Simular envío del mensaje
-    Alert.alert(
-      'Mensaje Enviado',
-      'Gracias por contactarnos. Te responderemos pronto.',
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            // Limpiar el formulario después del envío
-            setFormData({
-              name: '',
-              email: '',
-              message: ''
-            });
-          }
-        }
-      ]
-    );
+    // Guardar el mensaje en Firestore y enviar correo
+    addDoc(collection(db, 'contactMessages'), {
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      message: formData.message.trim(),
+      createdAt: serverTimestamp()
+    })
+      .then(() => {
+        // Enviar correo con EmailJS
+        sendContactEmail({
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          message: formData.message.trim(),
+        })
+          .then(() => {
+            setModalMessage('¡Mensaje enviado! Gracias por contactarnos. Te responderemos pronto.');
+            setFormData({ name: '', email: '', message: '' });
+            setModalVisible(true);
+          })
+          .catch(() => {
+            setModalMessage('El mensaje se guardó pero no se pudo enviar el correo.');
+            setModalVisible(true);
+          });
+      })
+      .catch(() => {
+        setModalMessage('No se pudo enviar el mensaje. Intenta de nuevo más tarde.');
+        setModalVisible(true);
+      });
   };
 
   const updateFormData = (field, value) => {
@@ -68,6 +89,23 @@ export default function ContactScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {/* Modal de confirmación visual */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' }}>
+          <View style={{ backgroundColor: '#fff', padding: 30, borderRadius: 20, alignItems: 'center', maxWidth: 300 }}>
+            <Ionicons name="mail" size={40} color="#4CAF50" style={{ marginBottom: 10 }} />
+            <Text style={{ fontSize: 18, textAlign: 'center', marginBottom: 20 }}>{modalMessage}</Text>
+            <TouchableOpacity onPress={() => setModalVisible(false)} style={{ backgroundColor: '#4CAF50', paddingHorizontal: 30, paddingVertical: 10, borderRadius: 10 }}>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       {/* Contenido principal */}
       <ScrollView 
         style={styles.scrollContainer}

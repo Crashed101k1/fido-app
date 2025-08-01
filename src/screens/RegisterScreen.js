@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Toast from '../components/Toast';
 import {
   View,
   Text,
@@ -20,70 +21,84 @@ export default function RegisterScreen({ navigation }) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'info' });
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const { signup } = useAuth();
 
   const handleRegister = async () => {
     // Validar campos vacíos
     if (!fullName.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
-      Alert.alert("Error", "Por favor completa todos los campos");
+      setToast({ visible: true, message: 'Por favor completa todos los campos', type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '', type: 'info' }), 2500);
       return;
     }
 
-    // Validar nombre completo (mínimo 2 palabras)
-    const nameWords = fullName.trim().split(" ");
-    if (nameWords.length < 2) {
-      Alert.alert("Error", "Por favor ingresa tu nombre completo");
+    // Validar nombre completo (mínimo 2 palabras, solo letras y espacios)
+    const nameWords = fullName.trim().split(/\s+/);
+    if (nameWords.length < 2 || !/^([A-Za-zÁÉÍÓÚáéíóúÑñ ]{2,})$/.test(fullName.trim())) {
+      setToast({ visible: true, message: 'Ingresa tu nombre completo (solo letras y espacios)', type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '', type: 'info' }), 2500);
       return;
     }
 
-    // Validación básica de email
+    // Validación de email (sin espacios, formato correcto)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      Alert.alert("Error", "Por favor ingresa un email válido");
+    if (!emailRegex.test(email) || email.includes(' ')) {
+      setToast({ visible: true, message: 'Por favor ingresa un email válido y sin espacios', type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '', type: 'info' }), 2500);
       return;
     }
 
-    // Validar longitud de contraseña
+    // Validar longitud y fortaleza de contraseña
+    // Debe tener al menos 6 caracteres, una mayúscula, una minúscula, un número y sin espacios
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{6,}$/;
     if (password.length < 6) {
-      Alert.alert("Error", "La contraseña debe tener al menos 6 caracteres");
+      setToast({ visible: true, message: 'La contraseña debe tener al menos 6 caracteres', type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '', type: 'info' }), 2500);
+      return;
+    }
+    if (!passwordRegex.test(password)) {
+      setToast({ visible: true, message: 'La contraseña debe tener mayúsculas, minúsculas y números', type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '', type: 'info' }), 2500);
+      return;
+    }
+    if (password.includes(' ')) {
+      setToast({ visible: true, message: 'La contraseña no debe contener espacios', type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '', type: 'info' }), 2500);
       return;
     }
 
     // Validar que las contraseñas coincidan
     if (password !== confirmPassword) {
-      Alert.alert("Error", "Las contraseñas no coinciden");
+      setToast({ visible: true, message: 'Las contraseñas no coinciden', type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '', type: 'info' }), 2500);
       return;
     }
 
+    setLoading(true);
     try {
-      setLoading(true);
       await signup(email, password, fullName.trim());
-      
-      // El usuario ahora está autenticado automáticamente
-      // El AuthContext manejará la navegación al HomeScreen
-      // No necesitamos hacer nada más aquí
-      
+      setShowSuccessModal(true);
     } catch (error) {
-      let errorMessage = "Error al crear la cuenta";
-      
+      let errorMessage = "No se pudo crear la cuenta.";
       switch (error.code) {
         case 'auth/email-already-in-use':
-          errorMessage = "Ya existe una cuenta con este correo electrónico";
+          errorMessage = "Este correo ya está registrado. Intenta iniciar sesión o usa otro correo.";
           break;
         case 'auth/invalid-email':
-          errorMessage = "Correo electrónico inválido";
+          errorMessage = "El correo ingresado no es válido. Verifica el formato.";
           break;
         case 'auth/weak-password':
-          errorMessage = "La contraseña es muy débil";
+          errorMessage = "La contraseña es demasiado débil. Usa una más segura.";
           break;
         case 'auth/operation-not-allowed':
-          errorMessage = "El registro con email no está habilitado";
+          errorMessage = "El registro está temporalmente deshabilitado. Intenta más tarde.";
           break;
         default:
-          errorMessage = error.message;
+          errorMessage = "No se pudo crear la cuenta. Verifica tus datos o intenta más tarde.";
       }
-      
-      Alert.alert("Error", errorMessage);
+      setToast({ visible: true, message: errorMessage, type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '', type: 'info' }), 2500);
     } finally {
       setLoading(false);
     }
@@ -94,106 +109,130 @@ export default function RegisterScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView 
-        contentContainerStyle={styles.scrollContainer}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Logo FIDO */}
-        <View style={styles.logoContainer}>
-          <Image
-            source={require("../../assets/FIDO_LOGO.png")}
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
-        </View>
-
-        {/* Contenido principal */}
-        <View style={styles.mainContent}>
-          <Text style={styles.title}>Crear Cuenta</Text>
-          <Text style={styles.subtitle}>
-            Únete a la comunidad FIDO
-          </Text>
-
-          {/* Formulario de registro */}
-          <View style={styles.formContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Nombre completo"
-              placeholderTextColor="#999"
-              value={fullName}
-              onChangeText={setFullName}
-              autoCapitalize="words"
-              autoCorrect={false}
-              editable={!loading}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Correo electrónico"
-              placeholderTextColor="#999"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!loading}
-            />
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Contraseña (mínimo 6 caracteres)"
-              placeholderTextColor="#999"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!loading}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Confirmar contraseña"
-              placeholderTextColor="#999"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!loading}
-            />
-
-            {/* Botón de registro */}
-            <TouchableOpacity 
-              style={[styles.registerButton, loading && styles.registerButtonDisabled]} 
-              onPress={handleRegister}
-              disabled={loading}
+    <View style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+      <Toast visible={toast.visible} message={toast.message} type={toast.type} />
+      {/* Modal de éxito */}
+      {showSuccessModal && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.4)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999
+        }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 18, padding: 32, alignItems: 'center', maxWidth: 320 }}>
+            <Image source={require('../../assets/FIDO_LOGO.png')} style={{ width: 60, height: 60, marginBottom: 18 }} />
+            <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#4CAF50', marginBottom: 10 }}>¡Registro exitoso!</Text>
+            <Text style={{ fontSize: 16, color: '#333', marginBottom: 24, textAlign: 'center' }}>Tu cuenta ha sido creada correctamente.</Text>
+            <TouchableOpacity
+              style={{ backgroundColor: '#4CAF50', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 32 }}
+              onPress={() => {
+                setShowSuccessModal(false);
+                navigation.replace('Main');
+              }}
             >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.registerButtonText}>Crear Cuenta</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* Login */}
-          <View style={styles.loginContainer}>
-            <Text style={styles.loginText}>¿Ya tienes cuenta?</Text>
-            <TouchableOpacity onPress={handleBackToLogin} disabled={loading}>
-              <Text style={[styles.loginLink, loading && styles.linkDisabled]}>
-                Inicia sesión aquí
-              </Text>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Ir al inicio</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      )}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          contentContainerStyle={[styles.scrollContainer, { paddingBottom: 40 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <View style={styles.logoContainer}>
+            <Image
+              source={require("../../assets/FIDO_LOGO.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
+          <View style={styles.mainContent}>
+            <Text style={styles.title}>Crear Cuenta</Text>
+            <Text style={styles.subtitle}>Únete a la comunidad FIDO</Text>
+            <View style={styles.formContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Nombre completo"
+                placeholderTextColor="#999"
+                value={fullName}
+                onChangeText={setFullName}
+                autoCapitalize="words"
+                autoCorrect={false}
+                editable={!loading}
+                returnKeyType="next"
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Correo electrónico"
+                placeholderTextColor="#999"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+                returnKeyType="next"
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Contraseña (mínimo 6 caracteres)"
+                placeholderTextColor="#999"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+                returnKeyType="next"
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Confirmar contraseña"
+                placeholderTextColor="#999"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+                returnKeyType="done"
+              />
+              <TouchableOpacity
+                style={[styles.registerButton, loading && styles.registerButtonDisabled]}
+                onPress={handleRegister}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.registerButtonText}>Crear Cuenta</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            <View style={styles.loginContainer}>
+              <Text style={styles.loginText}>¿Ya tienes cuenta?</Text>
+              <TouchableOpacity onPress={handleBackToLogin} disabled={loading}>
+                <Text style={[styles.loginLink, loading && styles.linkDisabled]}>
+                  Inicia sesión aquí
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -208,7 +247,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 40,
+    paddingVertical: 20,
+    minHeight: 600,
   },
   logoContainer: {
     alignItems: 'center',

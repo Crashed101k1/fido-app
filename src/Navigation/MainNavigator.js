@@ -141,20 +141,22 @@ function CustomDrawerContent({ navigation, state }) {
     ];
   }
 
-  const handleLogout = () => {
-    // Obtener el navigation del nivel superior (Stack Navigator)
+  const { logout } = require('../context/AuthContext').useAuth();
+  const handleLogout = async () => {
     try {
+      await logout();
       const rootNavigation = navigation.getParent();
       if (rootNavigation) {
         rootNavigation.reset({
           index: 0,
           routes: [{ name: 'Login' }],
         });
+      } else {
+        navigation.navigate('Login');
       }
     } catch (error) {
-      console.log('Error navigating to login:', error);
-      // Fallback: intentar navegar directamente
-      navigation.navigate('Login');
+      // Si hay error, mostrar toast o fallback
+      alert('No se pudo cerrar sesión. Intenta de nuevo.');
     }
   };
 

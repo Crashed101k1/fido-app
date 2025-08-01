@@ -23,6 +23,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { usePets } from '../hooks/usePets';
 import {
   View,
   Text,
@@ -72,16 +73,8 @@ export default function AccountScreen({ navigation }) {
     }
   }, [userProfile, currentUser]);
 
-  /** 
-   * Lista de mascotas del usuario para mostrar resumen
-   * En una aplicación real, estos datos vendrían sincronizados
-   * con el sistema de gestión de mascotas
-   */
-  const [pets] = useState([
-    { id: 1, name: 'Max', species: 'Perro', breed: 'Labrador', age: '3 años', dispenserId: 'DISP001' },
-    { id: 2, name: 'Luna', species: 'Gato', breed: 'Siamés', age: '2 años', dispenserId: 'DISP002' },
-    { id: 3, name: 'Bella', species: 'Perro', breed: 'Golden Retriever', age: '5 años', dispenserId: null },
-  ]);
+  // Mascotas en tiempo real
+  const { pets } = usePets();
 
   // ============ FUNCIONES DE MANEJO DE EVENTOS ============
 
@@ -243,16 +236,7 @@ export default function AccountScreen({ navigation }) {
                 <Text style={styles.cardTitle}>Mis Mascotas</Text>
                 <TouchableOpacity 
                   style={styles.managePetsButton}
-                  onPress={() => {
-                    Alert.alert(
-                      'Gestionar Mascotas',
-                      'Esta opción te llevará a la sección "Mi Mascota" donde podrás:\n\n• Agregar nuevas mascotas\n• Editar información de mascotas existentes\n• Asignar dispensadores\n• Eliminar mascotas\n• Configurar nombres de dispensadores',
-                      [
-                        { text: 'Cancelar', style: 'cancel' },
-                        { text: 'Ir a Mi Mascota', onPress: () => navigation.navigate('MyPet') }
-                      ]
-                    );
-                  }}
+                  onPress={() => navigation.navigate('TabNavigator', { screen: 'MyPet' })}
                 >
                   <Ionicons name="settings" size={20} color="#4CAF50" />
                   <Text style={styles.managePetsText}>Gestionar</Text>
@@ -261,18 +245,20 @@ export default function AccountScreen({ navigation }) {
               
               {pets.length > 0 ? (
                 <View style={styles.petsList}>
-                  {pets.map((pet) => (
+                  {pets && pets.length > 0 ? pets.map((pet) => (
                     <View key={pet.id} style={styles.petItem}>
                       <View style={styles.petInfo}>
                         <Ionicons
-                          name={pet.species === 'Perro' ? 'paw' : 'fish'}
+                          name={pet.species === 'Perro' ? 'paw' : pet.species === 'Gato' ? 'logo-octocat' : 'fish'}
                           size={20}
                           color="#4CAF50"
                           style={styles.petIcon}
                         />
                         <View style={styles.petDetails}>
                           <Text style={styles.petName}>{pet.name}</Text>
-                          <Text style={styles.petBreed}>{pet.breed} • {pet.age}</Text>
+                          <Text style={styles.petBreed}>
+                            {(pet.breed || pet.race || 'Sin raza')} • {(pet.age || pet.edad || 'Sin edad')}
+                          </Text>
                         </View>
                       </View>
                       <View style={styles.petStatus}>
@@ -285,7 +271,9 @@ export default function AccountScreen({ navigation }) {
                         </Text>
                       </View>
                     </View>
-                  ))}
+                  )) : (
+                    <Text style={styles.noPetsText}>No tienes mascotas registradas</Text>
+                  )}
                 </View>
               ) : (
                 <View style={styles.noPetsContainer}>
@@ -293,7 +281,7 @@ export default function AccountScreen({ navigation }) {
                   <Text style={styles.noPetsText}>No tienes mascotas registradas</Text>
                   <TouchableOpacity 
                     style={styles.addPetButton}
-                    onPress={() => navigation.navigate('MyPet')}
+                    onPress={() => navigation.navigate('TabNavigator', { screen: 'MyPet' })}
                   >
                     <Text style={styles.addPetButtonText}>Agregar Mascota</Text>
                   </TouchableOpacity>
