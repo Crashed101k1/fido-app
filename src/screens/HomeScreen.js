@@ -23,6 +23,7 @@
  */
 
 import React, { useState } from 'react';
+import { usePets } from '../hooks/usePets';
 import {
   View,
   Text,
@@ -42,55 +43,13 @@ import { Ionicons } from '@expo/vector-icons';
  */
 export default function HomeScreen({ navigation }) {
   // ============ ESTADO LOCAL ============
-  
-  /** Estado para controlar qué mascota está seleccionada actualmente */
+  const { pets, loading } = usePets();
   const [selectedPet, setSelectedPet] = useState(0);
-  
-  /** 
-   * Lista de mascotas del usuario con sus datos completos
-   * En una aplicación real, estos datos vendrían de un contexto global,
-   * base de datos local, o API del servidor
-   */
-  const [pets] = useState([
-    {
-      id: 1,
-      name: 'Max',
-      species: 'Perro',
-      dispenserId: 'DISP001',
-      dispenserName: 'Comedero de Max',
-      lastFeed: '2:30 PM',
-      nextFeed: '6:00 PM',
-      dailyPortions: 3,
-      completedToday: 2
-    },
-    {
-      id: 2,
-      name: 'Luna',
-      species: 'Gato',
-      dispenserId: 'DISP002',
-      dispenserName: 'Comedero Principal',
-      lastFeed: '1:15 PM',
-      nextFeed: '7:00 PM',
-      dailyPortions: 3,
-      completedToday: 2
-    },
-    {
-      id: 3,
-      name: 'Bella',
-      species: 'Perro',
-      dispenserId: null,
-      dispenserName: null,
-      lastFeed: 'Sin registro',
-      nextFeed: 'No programado',
-      dailyPortions: 0,
-      completedToday: 0
-    }
-  ]);
 
   // ============ DATOS DERIVADOS ============
   
   /** Referencia a la mascota actualmente seleccionada */
-  const currentPet = pets[selectedPet];
+  const currentPet = pets && pets.length > 0 ? pets[selectedPet] : null;
 
   // ============ FUNCIONES DE MANEJO DE EVENTOS ============
 
@@ -142,21 +101,18 @@ export default function HomeScreen({ navigation }) {
    */
   return (
     <View style={styles.container}>
-      {/* Contenedor de scroll para manejar contenido extenso */}
-      <ScrollView 
+      <ScrollView
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.mainContent}>
-          {/* Título principal del dashboard */}
           <Text style={styles.title}>Dashboard</Text>
-          
-          {/* SECCIÓN 1: Estado del Dispensador - PRIMERA PRIORIDAD */}
+
+          {/* Estado del Dispensador */}
           <View style={styles.dispenserStatusContainer}>
             <Text style={styles.sectionTitle}>Estado del Dispensador</Text>
-            {currentPet.dispenserId ? (
-              /* Tarjeta cuando el dispensador está conectado */
+            {currentPet && currentPet.dispenserId ? (
               <View style={styles.dispenserConnectedCard}>
                 <View style={styles.dispenserInfo}>
                   <Ionicons name="hardware-chip" size={30} color="#4CAF50" />
@@ -168,23 +124,19 @@ export default function HomeScreen({ navigation }) {
                   </View>
                 </View>
                 <View style={styles.dispenserActions}>
-                  <TouchableOpacity 
-                    style={styles.configButton}
-                    onPress={() => {/* Configurar dispensador */}}
-                  >
+                  <TouchableOpacity style={styles.configButton} onPress={() => {}}>
                     <Ionicons name="settings" size={16} color="#4CAF50" />
                   </TouchableOpacity>
                 </View>
               </View>
             ) : (
-              /* Tarjeta cuando no hay dispensador conectado */
               <View style={styles.dispenserDisconnectedCard}>
                 <Ionicons name="alert-circle" size={30} color="#F44336" />
                 <View style={styles.dispenserDetails}>
                   <Text style={styles.dispenserName}>Sin Dispensador</Text>
                   <Text style={styles.dispenserStatusText}>⚠️ No hay dispositivo conectado</Text>
                 </View>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.connectButton}
                   onPress={() => navigation.navigate('MyPet')}
                 >
@@ -197,38 +149,42 @@ export default function HomeScreen({ navigation }) {
           {/* Selector de Mascotas */}
           <View style={styles.petSelectorContainer}>
             <Text style={styles.sectionTitle}>Seleccionar Mascota</Text>
-            <ScrollView 
-              horizontal 
+            <ScrollView
+              horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.petSelectorScroll}
             >
-              {pets.map((pet, index) => (
-                <TouchableOpacity
-                  key={pet.id}
-                  style={[
-                    styles.petSelectorCard,
-                    selectedPet === index && styles.petSelectorCardActive
-                  ]}
-                  onPress={() => setSelectedPet(index)}
-                >
-                  <Ionicons
-                    name={pet.species === 'Perro' ? 'paw' : 'fish'}
-                    size={24}
-                    color={selectedPet === index ? '#FFFFFF' : '#4CAF50'}
-                  />
-                  <Text style={[
-                    styles.petSelectorName,
-                    selectedPet === index && styles.petSelectorNameActive
-                  ]}>
-                    {pet.name}
-                  </Text>
-                  {pet.dispenserId && (
-                    <View style={styles.dispenserIndicator}>
-                      <Ionicons name="hardware-chip" size={12} color={selectedPet === index ? '#FFFFFF' : '#666'} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
+              {pets && pets.length > 0 ? (
+                pets.map((pet, index) => (
+                  <TouchableOpacity
+                    key={pet.id}
+                    style={[
+                      styles.petSelectorCard,
+                      selectedPet === index && styles.petSelectorCardActive
+                    ]}
+                    onPress={() => setSelectedPet(index)}
+                  >
+                    <Ionicons
+                      name={pet.species === 'Perro' ? 'paw' : 'fish'}
+                      size={24}
+                      color={selectedPet === index ? '#FFFFFF' : '#4CAF50'}
+                    />
+                    <Text style={[
+                      styles.petSelectorName,
+                      selectedPet === index && styles.petSelectorNameActive
+                    ]}>
+                      {pet.name}
+                    </Text>
+                    {pet.dispenserId && (
+                      <View style={styles.dispenserIndicator}>
+                        <Ionicons name="hardware-chip" size={12} color={selectedPet === index ? '#FFFFFF' : '#666'} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={{ color: '#666', marginTop: 10 }}>No tienes mascotas registradas.</Text>
+              )}
             </ScrollView>
           </View>
 
@@ -236,13 +192,13 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.currentPetInfo}>
             <View style={styles.currentPetHeader}>
               <Ionicons
-                name={currentPet.species === 'Perro' ? 'paw' : 'fish'}
+                name={currentPet && currentPet.species === 'Perro' ? 'paw' : 'fish'}
                 size={30}
                 color="#4CAF50"
               />
               <View style={styles.currentPetDetails}>
-                <Text style={styles.currentPetName}>{currentPet.name}</Text>
-                <Text style={styles.currentPetSpecies}>{currentPet.species}</Text>
+                <Text style={styles.currentPetName}>{currentPet ? currentPet.name : 'Sin mascota'}</Text>
+                <Text style={styles.currentPetSpecies}>{currentPet ? currentPet.species : ''}</Text>
               </View>
             </View>
           </View>
@@ -254,7 +210,7 @@ export default function HomeScreen({ navigation }) {
                 <Ionicons name="time" size={20} color="#FF9800" />
                 <Text style={styles.cardTitle}>Última Comida</Text>
               </View>
-              <Text style={styles.cardValue}>{currentPet.lastFeed}</Text>
+              <Text style={styles.cardValue}>{currentPet && currentPet.lastFeed ? currentPet.lastFeed : 'Sin registro'}</Text>
               <Text style={styles.cardSubtitle}>Registro más reciente</Text>
             </View>
 
@@ -263,7 +219,7 @@ export default function HomeScreen({ navigation }) {
                 <Ionicons name="alarm" size={20} color="#2196F3" />
                 <Text style={styles.cardTitle}>Próxima Comida</Text>
               </View>
-              <Text style={styles.cardValue}>{currentPet.nextFeed}</Text>
+              <Text style={styles.cardValue}>{currentPet && currentPet.nextFeed ? currentPet.nextFeed : 'No programado'}</Text>
               <Text style={styles.cardSubtitle}>Siguiente horario programado</Text>
             </View>
 
@@ -273,7 +229,9 @@ export default function HomeScreen({ navigation }) {
                 <Text style={styles.cardTitle}>Progreso Hoy</Text>
               </View>
               <Text style={styles.cardValue}>
-                {currentPet.completedToday}/{currentPet.dailyPortions}
+                {currentPet && typeof currentPet.completedToday === 'number' && typeof currentPet.dailyPortions === 'number'
+                  ? `${currentPet.completedToday}/${currentPet.dailyPortions}`
+                  : '0/0'}
               </Text>
               <Text style={styles.cardSubtitle}>Porciones completadas</Text>
             </View>
@@ -281,32 +239,33 @@ export default function HomeScreen({ navigation }) {
 
           {/* Botón dispensar */}
           <View style={styles.dispenseContainer}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[
                 styles.dispenseButton,
-                !currentPet.dispenserId && styles.dispenseButtonDisabled
+                !(currentPet && currentPet.dispenserId) && styles.dispenseButtonDisabled
               ]}
               onPress={handleDispenseNow}
+              disabled={!(currentPet && currentPet.dispenserId)}
             >
-              <Ionicons 
-                name="restaurant" 
-                size={40} 
-                color={currentPet.dispenserId ? "#FFFFFF" : "#999"} 
+              <Ionicons
+                name="restaurant"
+                size={40}
+                color={currentPet && currentPet.dispenserId ? "#FFFFFF" : "#999"}
               />
             </TouchableOpacity>
             <Text style={[
               styles.dispenseText,
-              !currentPet.dispenserId && styles.dispenseTextDisabled
+              !(currentPet && currentPet.dispenserId) && styles.dispenseTextDisabled
             ]}>
-              {currentPet.dispenserId ? 'Dispensar Ahora' : 'Sin Dispensador'}
+              {currentPet && currentPet.dispenserId ? 'Dispensar Ahora' : 'Sin Dispensador'}
             </Text>
           </View>
 
           {/* Acciones rápidas */}
           <View style={styles.quickActionContainer}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.quickActionButton}
-              onPress={() => navigation.navigate('EatTime')}
+              onPress={() => navigation.navigate('EatTime', { selectedPetIndex: selectedPet })}
             >
               <Ionicons name="time" size={16} color="#4472C4" />
               <Text style={styles.quickActionText}>Configurar Horarios</Text>

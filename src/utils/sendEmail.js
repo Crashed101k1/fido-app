@@ -3,7 +3,7 @@ import emailjs from 'emailjs-com';
 
 export async function sendContactEmail({ name, email, message }) {
   // Reemplaza estos valores por los tuyos de EmailJS
-  const serviceID = 'service_wjdk6jo';
+  const serviceID = 'service_xbt8lpm';
   const templateID = 'template_gtcthhb';
   const userID = 'fjNFdsfw5wAU5YGRv';
 

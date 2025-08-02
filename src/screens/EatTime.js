@@ -24,7 +24,8 @@
  * - React Native Picker: Selectores de tiempo y porción
  */
 
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -32,457 +33,193 @@ import {
   StyleSheet,
   ScrollView,
   Modal,
-  TextInput,
-  Alert
+  TextInput
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
+import { db } from '../../firebaseConfig';
 
-/**
- * Componente principal de la pantalla de configuración de horarios
- * 
- * @param {Object} props - Propiedades del componente
- * @param {Object} props.navigation - Objeto de navegación de React Navigation
- * @returns {JSX.Element} Componente de pantalla de horarios de alimentación
- */
-export default function EatTimeScreen({ navigation }) {
-  
-  // ============ DATOS DE MASCOTAS ============
-  
-  /** 
-   * Lista de mascotas con configuración individual de horarios y porciones
-   * En una aplicación real, estos datos vendrían de un contexto global
-   * o serían sincronizados con un backend
-   */
-  const [pets] = useState([
-    { 
-      id: 1, 
-      name: 'Max', 
-      species: 'Perro',
-      dispenserId: 'DISP001',
-      feedingTimes: [
-        { id: 1, time: '8am', enabled: true },
-        { id: 2, time: '12pm', enabled: true },
-        { id: 3, time: '6pm', enabled: true },
-      ],
-      portions: [
-        { id: 1, amount: '150 grs', selected: true },
-        { id: 2, amount: '200 grs', selected: false },
-        { id: 3, amount: '250 grs', selected: false },
-      ]
-    },
-    { 
-      id: 2, 
-      name: 'Luna', 
-      species: 'Gato',
-      dispenserId: 'DISP002',
-      feedingTimes: [
-        { id: 1, time: '7am', enabled: true },
-        { id: 2, time: '1pm', enabled: true },
-        { id: 3, time: '7pm', enabled: false },
-      ],
-      portions: [
-        { id: 1, amount: '75 grs', selected: false },
-        { id: 2, amount: '100 grs', selected: true },
-        { id: 3, amount: '125 grs', selected: false },
-      ]
-    },
-    { 
-      id: 3, 
-      name: 'Bella', 
-      species: 'Perro',
-      dispenserId: null,
-      feedingTimes: [
-        { id: 1, time: '8am', enabled: true },
-        { id: 2, time: '5pm', enabled: true },
-      ],
-      portions: [
-        { id: 1, amount: '200 grs', selected: true },
-        { id: 2, amount: '300 grs', selected: false },
-      ]
-    },
-  ]);
-
-  const [selectedPetIndex, setSelectedPetIndex] = useState(0);
-  const [petsData, setPetsData] = useState(pets);
-  const [showTimeModal, setShowTimeModal] = useState(false);
-  const [showPortionModal, setShowPortionModal] = useState(false);
-  const [newTimeHour, setNewTimeHour] = useState('1');
-  const [newTimePeriod, setNewTimePeriod] = useState('pm');
-  const [newPortion, setNewPortion] = useState('');
-
-  const currentPet = petsData[selectedPetIndex];
-
-  const toggleFeedingTime = (timeId) => {
-    setPetsData(prev => 
-      prev.map((pet, index) => 
-        index === selectedPetIndex 
-          ? {
-              ...pet,
-              feedingTimes: pet.feedingTimes.map(time =>
-                time.id === timeId ? { ...time, enabled: !time.enabled } : time
-              )
-            }
-          : pet
-      )
-    );
-  };
-
-  const selectPortion = (portionId) => {
-    setPetsData(prev =>
-      prev.map((pet, index) =>
-        index === selectedPetIndex
-          ? {
-              ...pet,
-              portions: pet.portions.map(portion =>
-                portion.id === portionId
-                  ? { ...portion, selected: true }
-                  : { ...portion, selected: false }
-              )
-            }
-          : pet
-      )
-    );
-  };
-
-  const addNewTime = () => {
-    if (!newTimeHour) return;
-    
-    const timeString = `${newTimeHour}${newTimePeriod}`;
-    const newTimeObj = { id: Date.now(), time: timeString, enabled: true };
-    
-    setPetsData(prev =>
-      prev.map((pet, index) =>
-        index === selectedPetIndex
-          ? { ...pet, feedingTimes: [...pet.feedingTimes, newTimeObj] }
-          : pet
-      )
-    );
-    
-    setShowTimeModal(false);
-    setNewTimeHour('1');
-    setNewTimePeriod('pm');
-  };
-
-  const addNewPortion = () => {
-    if (!newPortion || isNaN(newPortion)) {
-      Alert.alert('Error', 'Por favor ingrese una cantidad válida');
-      return;
-    }
-    
-    const newPortionObj = { id: Date.now(), amount: `${newPortion} grs`, selected: false };
-    
-    setPetsData(prev =>
-      prev.map((pet, index) =>
-        index === selectedPetIndex
-          ? { ...pet, portions: [...pet.portions, newPortionObj] }
-          : pet
-      )
-    );
-    
-    setShowPortionModal(false);
-    setNewPortion('');
-  };
-
-  const deleteFeedingTime = (timeId) => {
-    Alert.alert(
-      'Eliminar Horario',
-      '¿Estás seguro de que quieres eliminar este horario?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: () => {
-            setPetsData(prev =>
-              prev.map((pet, index) =>
-                index === selectedPetIndex
-                  ? { ...pet, feedingTimes: pet.feedingTimes.filter(time => time.id !== timeId) }
-                  : pet
-              )
-            );
-          }
-        }
-      ]
-    );
-  };
-
-  const deletePortion = (portionId) => {
-    Alert.alert(
-      'Eliminar Porción',
-      '¿Estás seguro de que quieres eliminar esta porción?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: () => {
-            setPetsData(prev =>
-              prev.map((pet, index) =>
-                index === selectedPetIndex
-                  ? { ...pet, portions: pet.portions.filter(portion => portion.id !== portionId) }
-                  : pet
-              )
-            );
-          }
-        }
-      ]
-    );
-  };
-
-  const TimeModal = () => (
-    <Modal visible={showTimeModal} transparent animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Agregar Nuevo Horario para {currentPet.name}</Text>
-          <View style={styles.timePickerContainer}>
-            <Picker
-              selectedValue={newTimeHour}
-              style={styles.timePicker}
-              onValueChange={(value) => setNewTimeHour(value)}
-            >
-              {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => (
-                <Picker.Item key={hour} label={hour.toString()} value={hour.toString()} />
-              ))}
-            </Picker>
-            <Picker
-              selectedValue={newTimePeriod}
-              style={styles.timePicker}
-              onValueChange={(value) => setNewTimePeriod(value)}
-            >
-              <Picker.Item label="AM" value="am" />
-              <Picker.Item label="PM" value="pm" />
-            </Picker>
-          </View>
-          <View style={styles.modalButtons}>
-            <TouchableOpacity 
-              style={[styles.modalButton, styles.cancelButton]} 
-              onPress={() => setShowTimeModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Cancelar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.modalButton, styles.addButton]} onPress={addNewTime}>
-              <Text style={styles.addButtonText}>Agregar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  const PortionModal = () => (
-    <Modal visible={showPortionModal} transparent animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Agregar Nueva Porción para {currentPet.name}</Text>
-          <TextInput
-            style={styles.portionInput}
-            placeholder="Ej: 150"
-            value={newPortion}
-            onChangeText={setNewPortion}
-            keyboardType="numeric"
-          />
-          <Text style={styles.inputHint}>Cantidad en gramos</Text>
-          <View style={styles.modalButtons}>
-            <TouchableOpacity 
-              style={[styles.modalButton, styles.cancelButton]} 
-              onPress={() => setShowPortionModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Cancelar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.modalButton, styles.addButton]} onPress={addNewPortion}>
-              <Text style={styles.addButtonText}>Agregar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  return (
-    <View style={styles.container}>
-      <ScrollView 
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.mainContent}>
-          <Text style={styles.title}>Hora de Comer</Text>
-          
-          {/* Selector de Mascotas */}
-          <View style={styles.petSelectorContainer}>
-            <Text style={styles.sectionTitle}>Seleccionar Mascota</Text>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.petSelectorScroll}
-            >
-              {petsData.map((pet, index) => (
-                <TouchableOpacity
-                  key={pet.id}
-                  style={[
-                    styles.petSelectorCard,
-                    selectedPetIndex === index && styles.petSelectorCardActive
-                  ]}
-                  onPress={() => setSelectedPetIndex(index)}
-                >
-                  <Ionicons
-                    name={pet.species === 'Perro' ? 'paw' : 'fish'}
-                    size={24}
-                    color={selectedPetIndex === index ? '#FFFFFF' : '#4CAF50'}
-                  />
-                  <Text style={[
-                    styles.petSelectorName,
-                    selectedPetIndex === index && styles.petSelectorNameActive
-                  ]}>
-                    {pet.name}
-                  </Text>
-                  {pet.dispenserId && (
-                    <View style={styles.dispenserIndicator}>
-                      <Ionicons name="hardware-chip" size={12} color={selectedPetIndex === index ? '#FFFFFF' : '#666'} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Información de la mascota actual */}
-          <View style={styles.currentPetInfo}>
-            <View style={styles.currentPetHeader}>
-              <Ionicons
-                name={currentPet.species === 'Perro' ? 'paw' : 'fish'}
-                size={30}
-                color="#4CAF50"
-              />
-              <View style={styles.currentPetDetails}>
-                <Text style={styles.currentPetName}>{currentPet.name}</Text>
-                <Text style={styles.currentPetSpecies}>{currentPet.species}</Text>
-              </View>
-              <View style={styles.dispenserStatus}>
-                <View style={[
-                  styles.statusIndicator,
-                  { backgroundColor: currentPet.dispenserId ? '#4CAF50' : '#E0E0E0' }
-                ]} />
-                <Text style={styles.dispenserStatusText}>
-                  {currentPet.dispenserId ? 'Conectado' : 'Sin Dispensador'}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.sectionsContainer}>
-            {/* Sección de Horarios */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Horarios de Alimentación</Text>
-                <TouchableOpacity 
-                  style={styles.addIconButton} 
-                  onPress={() => setShowTimeModal(true)}
-                >
-                  <Ionicons name="add-circle" size={24} color="#4CAF50" />
-                </TouchableOpacity>
-              </View>
-              
-              {currentPet.feedingTimes.map((time) => (
-                <View key={time.id} style={styles.timeItem}>
-                  <TouchableOpacity 
-                    style={styles.timeContent}
-                    onPress={() => toggleFeedingTime(time.id)}
-                  >
-                    <Text style={[
-                      styles.timeText, 
-                      !time.enabled && styles.timeTextDisabled
-                    ]}>
-                      {time.time}
-                    </Text>
-                    <Ionicons
-                      name={time.enabled ? 'checkmark-circle' : 'ellipse-outline'}
-                      size={20}
-                      color={time.enabled ? '#4CAF50' : '#CCC'}
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.deleteButton}
-                    onPress={() => deleteFeedingTime(time.id)}
-                  >
-                    <Ionicons name="trash" size={16} color="#F44336" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-              
-              {currentPet.feedingTimes.length === 0 && (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>No hay horarios configurados</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Sección de Porciones */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Porciones</Text>
-                <TouchableOpacity 
-                  style={styles.addIconButton} 
-                  onPress={() => setShowPortionModal(true)}
-                >
-                  <Ionicons name="add-circle" size={24} color="#4CAF50" />
-                </TouchableOpacity>
-              </View>
-              
-              {currentPet.portions.map((portion) => (
-                <View key={portion.id} style={styles.portionItem}>
-                  <TouchableOpacity 
-                    style={styles.portionContent}
-                    onPress={() => selectPortion(portion.id)}
-                  >
-                    <Text style={[
-                      styles.portionText,
-                      portion.selected && styles.portionTextSelected
-                    ]}>
-                      {portion.amount}
-                    </Text>
-                    <Ionicons
-                      name={portion.selected ? 'radio-button-on' : 'radio-button-off'}
-                      size={20}
-                      color={portion.selected ? '#4CAF50' : '#CCC'}
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.deleteButton}
-                    onPress={() => deletePortion(portion.id)}
-                  >
-                    <Ionicons name="trash" size={16} color="#F44336" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-              
-              {currentPet.portions.length === 0 && (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>No hay porciones configuradas</Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {/* Botón de guardar configuración */}
-          <TouchableOpacity 
-            style={styles.saveButton}
-            onPress={() => {
-              Alert.alert('Configuración Guardada', `La configuración de alimentación para ${currentPet.name} ha sido guardada exitosamente.`);
-            }}
+// --- MODALES COMO COMPONENTES EXTERNOS ---
+const TimeModal = ({ visible, onCancel, onAdd, newTimeHour, setNewTimeHour, newTimePeriod, setNewTimePeriod, currentPet }) => (
+  <Modal visible={visible} transparent animationType="slide">
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalContent}>
+        <Text style={styles.modalTitle}>Agregar Nuevo Horario para {currentPet?.name || ''}</Text>
+        <View style={styles.timePickerContainer}>
+          <Picker
+            selectedValue={newTimeHour}
+            style={styles.timePicker}
+            onValueChange={setNewTimeHour}
           >
-            <Ionicons name="save" size={20} color="#FFFFFF" style={styles.saveIcon} />
-            <Text style={styles.saveButtonText}>Guardar Configuración</Text>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => (
+              <Picker.Item key={hour} label={hour.toString()} value={hour.toString()} />
+            ))}
+          </Picker>
+          <Picker
+            selectedValue={newTimePeriod}
+            style={styles.timePicker}
+            onValueChange={setNewTimePeriod}
+          >
+            <Picker.Item label="AM" value="am" />
+            <Picker.Item label="PM" value="pm" />
+          </Picker>
+        </View>
+        <View style={styles.modalButtons}>
+          <TouchableOpacity 
+            style={[styles.modalButton, styles.cancelButton]} 
+            onPress={onCancel}
+          >
+            <Text style={styles.cancelButtonText}>Cancelar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.modalButton, styles.addButton]} onPress={onAdd}>
+            <Text style={styles.addButtonText}>Agregar</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
-      
-      <TimeModal />
-      <PortionModal />
+      </View>
     </View>
-  );
-}
+  </Modal>
+);
+
+const PortionModal = ({ visible, onCancel, onAdd, newPortion, setNewPortion, currentPet }) => (
+  <Modal visible={visible} transparent animationType="slide">
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalContent}>
+        <Text style={styles.modalTitle}>Agregar Nueva Porción para {currentPet?.name || ''}</Text>
+        <TextInput
+          style={styles.portionInput}
+          placeholder="Ej: 150"
+          value={newPortion}
+          onChangeText={setNewPortion}
+          keyboardType="numeric"
+        />
+        <Text style={styles.inputHint}>Cantidad en gramos</Text>
+        <View style={styles.modalButtons}>
+          <TouchableOpacity 
+            style={[styles.modalButton, styles.cancelButton]} 
+            onPress={onCancel}
+          >
+            <Text style={styles.cancelButtonText}>Cancelar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.modalButton, styles.addButton]} onPress={onAdd}>
+            <Text style={styles.addButtonText}>Agregar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  </Modal>
+);
+
+const AppModal = ({ visible, modalType, modalTitle, modalMessage, modalActions }) => (
+  <Modal visible={visible} transparent animationType="fade">
+    <View style={modalStyles.overlay}>
+      <View style={modalStyles.content}>
+        <Ionicons
+          name={modalType === 'error' ? 'alert-circle' : modalType === 'confirm' ? 'help-circle' : 'information-circle'}
+          size={40}
+          color={modalType === 'error' ? '#F44336' : modalType === 'confirm' ? '#FF9800' : '#4CAF50'}
+          style={{ alignSelf: 'center', marginBottom: 10 }}
+        />
+        <Text style={modalStyles.title}>{modalTitle}</Text>
+        <Text style={modalStyles.message}>{modalMessage}</Text>
+        <View style={modalStyles.actions}>
+          {modalActions.map((action, idx) => (
+            <TouchableOpacity
+              key={idx}
+              style={[
+                modalStyles.button,
+                action.style === 'destructive' && modalStyles.destructiveButton,
+                action.style === 'cancel' && modalStyles.cancelButton
+              ]}
+              onPress={action.onPress}
+            >
+              <Text style={[
+                modalStyles.buttonText,
+                action.style === 'destructive' && modalStyles.destructiveButtonText,
+                action.style === 'cancel' && modalStyles.cancelButtonText
+              ]}>{action.text}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    </View>
+  </Modal>
+);
+import {
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  orderBy
+} from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
+import { where } from 'firebase/firestore';
+
+// --- ESTILOS ANTES DE LA FUNCIÓN PRINCIPAL ---
+const modalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 28,
+    minWidth: 280,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  message: {
+    marginVertical: 16,
+    textAlign: 'center',
+    color: '#333',
+    fontSize: 16,
+  },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  button: {
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    marginHorizontal: 8,
+    backgroundColor: '#4CAF50',
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  destructiveButton: {
+    backgroundColor: '#F44336',
+  },
+  destructiveButtonText: {
+    color: '#fff',
+  },
+  cancelButton: {
+    backgroundColor: '#E0E0E0',
+  },
+  cancelButtonText: {
+    color: '#333',
+  },
+});
 
 const styles = StyleSheet.create({
   container: { 
@@ -505,8 +242,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     color: '#000'
   },
-
-  // Selector de mascotas
+  // ...resto de estilos igual...
   petSelectorContainer: {
     marginBottom: 25,
   },
@@ -540,8 +276,6 @@ const styles = StyleSheet.create({
   dispenserIndicator: {
     marginTop: 3,
   },
-
-  // Información de mascota actual
   currentPetInfo: {
     backgroundColor: '#FFFFFF',
     borderRadius: 15,
@@ -581,8 +315,6 @@ const styles = StyleSheet.create({
     color: '#666',
     fontWeight: '600',
   },
-
-  // Secciones principales
   sectionsContainer: { 
     flexDirection: 'row', 
     justifyContent: 'space-between',
@@ -606,8 +338,6 @@ const styles = StyleSheet.create({
   addIconButton: {
     padding: 5,
   },
-
-  // Items de tiempo
   timeItem: { 
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
@@ -633,8 +363,6 @@ const styles = StyleSheet.create({
     color: '#999',
     textDecorationLine: 'line-through',
   },
-
-  // Items de porción
   portionItem: { 
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
@@ -660,14 +388,10 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     fontWeight: 'bold',
   },
-
-  // Botón eliminar
   deleteButton: {
     padding: 10,
     marginRight: 5,
   },
-
-  // Estados vacíos
   emptyState: {
     backgroundColor: '#F5F5F5',
     borderRadius: 10,
@@ -679,8 +403,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
   },
-
-  // Botón guardar
   saveButton: {
     backgroundColor: '#4CAF50',
     flexDirection: 'row',
@@ -698,8 +420,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-
-  // Modales
   modalOverlay: { 
     flex: 1, 
     justifyContent: 'center', 
@@ -773,3 +493,484 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
+
+/**
+ * Componente principal de la pantalla de configuración de horarios
+ * 
+ * @param {Object} props - Propiedades del componente
+ * @param {Object} props.navigation - Objeto de navegación de React Navigation
+ * @returns {JSX.Element} Componente de pantalla de horarios de alimentación
+ */
+import { useFocusEffect } from '@react-navigation/native';
+export default function EatTimeScreen({ navigation, route }) {
+  const { currentUser } = useAuth();
+  const [pets, setPets] = useState([]);
+  // Permitir selección inicial y sincronización de mascota vía parámetro (índice o ID)
+  const [selectedPetIndex, setSelectedPetIndex] = useState(() => {
+    if (route?.params?.selectedPetId) return 0; // temporal, se ajusta en useEffect
+    return route?.params?.selectedPetIndex ?? 0;
+  });
+
+  // Sincronizar selectedPetIndex si cambia el parámetro de navegación (índice o ID)
+  useEffect(() => {
+    // Si se pasa selectedPetIndex, priorizarlo
+    if (typeof route?.params?.selectedPetIndex === 'number' && route.params.selectedPetIndex !== selectedPetIndex) {
+      setSelectedPetIndex(route.params.selectedPetIndex);
+      return;
+    }
+    // Si se pasa selectedPetId, buscar el índice correspondiente
+    if (route?.params?.selectedPetId && pets.length > 0) {
+      const idx = pets.findIndex(p => p.id === route.params.selectedPetId);
+      if (idx !== -1 && idx !== selectedPetIndex) {
+        setSelectedPetIndex(idx);
+      }
+    }
+  }, [route?.params?.selectedPetIndex, route?.params?.selectedPetId, pets]);
+  // Estados sincronizados con Firestore
+  const [feedingTimes, setFeedingTimes] = useState([]);
+  const [portions, setPortions] = useState([]);
+  // Estados locales editables
+  const [localFeedingTimes, setLocalFeedingTimes] = useState([]);
+  const [localPortions, setLocalPortions] = useState([]);
+  const [showTimeModal, setShowTimeModal] = useState(false);
+  const [showPortionModal, setShowPortionModal] = useState(false);
+  const [newTimeHour, setNewTimeHour] = useState('1');
+  const [newTimePeriod, setNewTimePeriod] = useState('pm');
+  const [newPortion, setNewPortion] = useState('');
+
+  // Estado para modal de avisos/errores/confirmaciones
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState('info'); // 'info', 'error', 'confirm'
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalActions, setModalActions] = useState([]); // [{text, onPress, style}]
+
+  // Estado para advertencia de cambios no guardados
+  const [pendingPetIndex, setPendingPetIndex] = useState(null);
+
+  // Estado para advertencia al salir de la pantalla
+  const [pendingNavigation, setPendingNavigation] = useState(null);
+
+  const currentPet = pets[selectedPetIndex];
+  // Sincronizar mascotas del usuario
+  useEffect(() => {
+    if (!currentUser) return;
+    const petsRef = collection(db, 'pets');
+    const q = query(petsRef, where('userId', '==', currentUser.uid));
+    const unsub = onSnapshot(q, (snap) => {
+      setPets(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsub();
+  }, [currentUser]);
+
+  // Sincronizar subcolecciones de la mascota seleccionada
+  useEffect(() => {
+    if (!currentPet) {
+      setFeedingTimes([]);
+      setPortions([]);
+      setLocalFeedingTimes([]);
+      setLocalPortions([]);
+      return;
+    }
+    const feedingRef = collection(db, 'pets', currentPet.id, 'feedingTimes');
+    const portionsRef = collection(db, 'pets', currentPet.id, 'portions');
+    const unsub1 = onSnapshot(query(feedingRef, orderBy('time')), (snap) => {
+      const times = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setFeedingTimes(times);
+      setLocalFeedingTimes(times);
+    });
+    const unsub2 = onSnapshot(portionsRef, (snap) => {
+      const pors = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setPortions(pors);
+      setLocalPortions(pors);
+    });
+    return () => { unsub1(); unsub2(); };
+  }, [currentPet]);
+
+
+  // CRUD LOCAL
+  const toggleFeedingTime = (timeId, enabled) => {
+    setLocalFeedingTimes(times => times.map(t => t.id === timeId ? { ...t, enabled: !enabled } : t));
+  };
+
+  const selectPortion = (portionId) => {
+    setLocalPortions(portions => portions.map(p => ({ ...p, selected: p.id === portionId })));
+  };
+
+  const addNewTime = () => {
+    if (!newTimeHour) return;
+    const timeString = `${newTimeHour}${newTimePeriod}`;
+    setLocalFeedingTimes(times => ([
+      ...times,
+      { id: `local-${Date.now()}`, time: timeString, enabled: true, local: true }
+    ]));
+    setShowTimeModal(false);
+    setNewTimeHour('1');
+    setNewTimePeriod('pm');
+  };
+
+  const addNewPortion = () => {
+    if (!newPortion || isNaN(newPortion)) {
+      setModalType('error');
+      setModalTitle('Error');
+      setModalMessage('Por favor ingrese una cantidad válida');
+      setModalActions([
+        { text: 'OK', onPress: () => setModalVisible(false), style: 'default' }
+      ]);
+      setModalVisible(true);
+      return;
+    }
+    setLocalPortions(portions => ([
+      ...portions,
+      { id: `local-${Date.now()}`, amount: `${newPortion} grs`, selected: false, local: true }
+    ]));
+    setShowPortionModal(false);
+    setNewPortion('');
+  };
+
+  const deleteFeedingTime = (timeId) => {
+    setModalType('confirm');
+    setModalTitle('Eliminar Horario');
+    setModalMessage('¿Estás seguro de que quieres eliminar este horario?');
+    setModalActions([
+      { text: 'Cancelar', onPress: () => setModalVisible(false), style: 'cancel' },
+      {
+        text: 'Eliminar',
+        onPress: () => {
+          setLocalFeedingTimes(times => times.filter(t => t.id !== timeId));
+          setModalVisible(false);
+        },
+        style: 'destructive'
+      }
+    ]);
+    setModalVisible(true);
+  };
+
+  const deletePortion = (portionId) => {
+    setModalType('confirm');
+    setModalTitle('Eliminar Porción');
+    setModalMessage('¿Estás seguro de que quieres eliminar esta porción?');
+    setModalActions([
+      { text: 'Cancelar', onPress: () => setModalVisible(false), style: 'cancel' },
+      {
+        text: 'Eliminar',
+        onPress: () => {
+          setLocalPortions(portions => portions.filter(p => p.id !== portionId));
+          setModalVisible(false);
+        },
+        style: 'destructive'
+      }
+    ]);
+    setModalVisible(true);
+  };
+
+  // GUARDAR EN FIRESTORE AL PRESIONAR BOTÓN
+  const saveConfig = async () => {
+    if (!currentPet) return;
+    // Guardar horarios
+    // 1. Eliminar los que ya no existen
+    const toDeleteTimes = feedingTimes.filter(t => !localFeedingTimes.some(lt => lt.id === t.id));
+    for (const t of toDeleteTimes) {
+      await deleteDoc(doc(db, 'pets', currentPet.id, 'feedingTimes', t.id));
+    }
+    // 2. Crear nuevos
+    const toAddTimes = localFeedingTimes.filter(lt => lt.local);
+    for (const t of toAddTimes) {
+      await addDoc(collection(db, 'pets', currentPet.id, 'feedingTimes'), {
+        time: t.time,
+        enabled: t.enabled
+      });
+    }
+    // 3. Actualizar existentes
+    const toUpdateTimes = localFeedingTimes.filter(lt => !lt.local);
+    for (const t of toUpdateTimes) {
+      await updateDoc(doc(db, 'pets', currentPet.id, 'feedingTimes', t.id), {
+        time: t.time,
+        enabled: t.enabled
+      });
+    }
+
+    // Guardar porciones
+    // 1. Eliminar las que ya no existen
+    const toDeletePortions = portions.filter(p => !localPortions.some(lp => lp.id === p.id));
+    for (const p of toDeletePortions) {
+      await deleteDoc(doc(db, 'pets', currentPet.id, 'portions', p.id));
+    }
+    // 2. Crear nuevas
+    const toAddPortions = localPortions.filter(lp => lp.local);
+    for (const p of toAddPortions) {
+      await addDoc(collection(db, 'pets', currentPet.id, 'portions'), {
+        amount: p.amount,
+        selected: p.selected
+      });
+    }
+    // 3. Actualizar existentes
+    const toUpdatePortions = localPortions.filter(lp => !lp.local);
+    for (const p of toUpdatePortions) {
+      await updateDoc(doc(db, 'pets', currentPet.id, 'portions', p.id), {
+        amount: p.amount,
+        selected: p.selected
+      });
+    }
+
+    setModalType('info');
+    setModalTitle('Configuración Guardada');
+    setModalMessage(`La configuración de alimentación para ${currentPet?.name || ''} ha sido guardada exitosamente.`);
+    setModalActions([
+      { text: 'OK', onPress: () => setModalVisible(false), style: 'default' }
+    ]);
+    setModalVisible(true);
+  };
+
+  // Función para detectar cambios no guardados
+  const hasUnsavedChanges = () => {
+    // Compara los arrays de objetos (ignora el campo local)
+    const clean = arr => arr.map(o => {
+      const { local, ...rest } = o;
+      return rest;
+    });
+    const arrEq = (a, b) => JSON.stringify(clean(a)) === JSON.stringify(clean(b));
+    return !arrEq(feedingTimes, localFeedingTimes) || !arrEq(portions, localPortions);
+  };
+
+  // Handler para cambio de mascota
+  const handlePetSelect = (index) => {
+    if (index === selectedPetIndex) return;
+    if (hasUnsavedChanges()) {
+      setPendingPetIndex(index);
+      setModalType('confirm');
+      setModalTitle('Cambios no guardados');
+      setModalMessage('¿Está seguro que desea abandonar? Los cambios no se guardarán.');
+      setModalActions([
+        { text: 'Cancelar', onPress: () => { setModalVisible(false); setPendingPetIndex(null); }, style: 'cancel' },
+        { text: 'Abandonar', onPress: () => {
+            setModalVisible(false);
+            setPendingPetIndex(null);
+            setSelectedPetIndex(index);
+          }, style: 'destructive' }
+      ]);
+      setModalVisible(true);
+    } else {
+      setSelectedPetIndex(index);
+    }
+  };
+
+  // Bloquear navegación si hay cambios no guardados
+  useFocusEffect(
+    React.useCallback(() => {
+      const beforeRemoveListener = (e) => {
+        if (!hasUnsavedChanges()) return;
+        e.preventDefault();
+        setPendingNavigation(e.data.action);
+        setModalType('confirm');
+        setModalTitle('Cambios no guardados');
+        setModalMessage('¿Está seguro que desea abandonar? Los cambios no se guardarán.');
+        setModalActions([
+          { text: 'Cancelar', onPress: () => { setModalVisible(false); setPendingNavigation(null); }, style: 'cancel' },
+          { text: 'Abandonar', onPress: () => {
+              setModalVisible(false);
+              setPendingNavigation(null);
+              navigation.dispatch(e.data.action);
+            }, style: 'destructive' }
+        ]);
+        setModalVisible(true);
+      };
+      navigation.addListener('beforeRemove', beforeRemoveListener);
+      return () => navigation.removeListener('beforeRemove', beforeRemoveListener);
+    }, [navigation, hasUnsavedChanges, localFeedingTimes, localPortions, feedingTimes, portions])
+  );
+
+  return (
+    <View style={styles.container}>
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.mainContent}>
+          <Text style={styles.title}>Hora de Comer</Text>
+          {/* Selector de Mascotas */}
+          <View style={styles.petSelectorContainer}>
+            <Text style={styles.sectionTitle}>Seleccionar Mascota</Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.petSelectorScroll}
+            >
+              {pets.map((pet, index) => (
+                <TouchableOpacity
+                  key={pet.id}
+                  style={[
+                    styles.petSelectorCard,
+                    selectedPetIndex === index && styles.petSelectorCardActive
+                  ]}
+                  onPress={() => handlePetSelect(index)}
+                >
+                  <Ionicons
+                    name={pet.species === 'Perro' ? 'paw' : 'fish'}
+                    size={24}
+                    color={selectedPetIndex === index ? '#FFFFFF' : '#4CAF50'}
+                  />
+                  <Text style={[
+                    styles.petSelectorName,
+                    selectedPetIndex === index && styles.petSelectorNameActive
+                  ]}>
+                    {pet.name}
+                  </Text>
+                  {pet.dispenserId && (
+                    <View style={styles.dispenserIndicator}>
+                      <Ionicons name="hardware-chip" size={12} color={selectedPetIndex === index ? '#FFFFFF' : '#666'} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+          {/* Información de la mascota actual */}
+          {currentPet && (
+            <View style={styles.currentPetInfo}>
+              <View style={styles.currentPetHeader}>
+                <Ionicons
+                  name={currentPet.species === 'Perro' ? 'paw' : 'fish'}
+                  size={30}
+                  color="#4CAF50"
+                />
+                <View style={styles.currentPetDetails}>
+                  <Text style={styles.currentPetName}>{currentPet.name}</Text>
+                  <Text style={styles.currentPetSpecies}>{currentPet.species}</Text>
+                </View>
+                <View style={styles.dispenserStatus}>
+                  <View style={[
+                    styles.statusIndicator,
+                    { backgroundColor: currentPet.dispenserId ? '#4CAF50' : '#E0E0E0' }
+                  ]} />
+                  <Text style={styles.dispenserStatusText}>
+                    {currentPet.dispenserId ? 'Conectado' : 'Sin Dispensador'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+          <View style={styles.sectionsContainer}>
+            {/* Sección de Horarios */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Horarios de Alimentación</Text>
+                <TouchableOpacity 
+                  style={styles.addIconButton} 
+                  onPress={() => setShowTimeModal(true)}
+                >
+                  <Ionicons name="add-circle" size={24} color="#4CAF50" />
+                </TouchableOpacity>
+              </View>
+              {localFeedingTimes.map((time) => (
+                <View key={time.id} style={styles.timeItem}>
+                  <TouchableOpacity 
+                    style={styles.timeContent}
+                    onPress={() => toggleFeedingTime(time.id, time.enabled)}
+                  >
+                    <Text style={[styles.timeText, !time.enabled && styles.timeTextDisabled]}>
+                      {time.time}
+                    </Text>
+                    <Ionicons
+                      name={time.enabled ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={20}
+                      color={time.enabled ? '#4CAF50' : '#CCC'}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.deleteButton}
+                    onPress={() => deleteFeedingTime(time.id)}
+                  >
+                    <Ionicons name="trash" size={16} color="#F44336" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {localFeedingTimes.length === 0 && (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>No hay horarios configurados</Text>
+                </View>
+              )}
+            </View>
+            {/* Sección de Porciones */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Porciones</Text>
+                <TouchableOpacity 
+                  style={styles.addIconButton} 
+                  onPress={() => setShowPortionModal(true)}
+                >
+                  <Ionicons name="add-circle" size={24} color="#4CAF50" />
+                </TouchableOpacity>
+              </View>
+              {localPortions.map((portion) => (
+                <View key={portion.id} style={styles.portionItem}>
+                  <TouchableOpacity 
+                    style={styles.portionContent}
+                    onPress={() => selectPortion(portion.id)}
+                  >
+                    <Text style={[
+                      styles.portionText,
+                      portion.selected && styles.portionTextSelected
+                    ]}>
+                      {portion.amount}
+                    </Text>
+                    <Ionicons
+                      name={portion.selected ? 'radio-button-on' : 'radio-button-off'}
+                      size={20}
+                      color={portion.selected ? '#4CAF50' : '#CCC'}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.deleteButton}
+                    onPress={() => deletePortion(portion.id)}
+                  >
+                    <Ionicons name="trash" size={16} color="#F44336" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {localPortions.length === 0 && (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>No hay porciones configuradas</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          {/* Botón de guardar configuración */}
+          <TouchableOpacity 
+            style={styles.saveButton}
+            onPress={saveConfig}
+          >
+            <Ionicons name="save" size={20} color="#FFFFFF" style={styles.saveIcon} />
+            <Text style={styles.saveButtonText}>Guardar Configuración</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+      <TimeModal
+        visible={showTimeModal}
+        onCancel={() => setShowTimeModal(false)}
+        onAdd={addNewTime}
+        newTimeHour={newTimeHour}
+        setNewTimeHour={setNewTimeHour}
+        newTimePeriod={newTimePeriod}
+        setNewTimePeriod={setNewTimePeriod}
+        currentPet={currentPet}
+      />
+      <PortionModal
+        visible={showPortionModal}
+        onCancel={() => setShowPortionModal(false)}
+        onAdd={addNewPortion}
+        newPortion={newPortion}
+        setNewPortion={setNewPortion}
+        currentPet={currentPet}
+      />
+      <AppModal
+        visible={modalVisible}
+        modalType={modalType}
+        modalTitle={modalTitle}
+        modalMessage={modalMessage}
+        modalActions={modalActions}
+      />
+    </View>
+  );
+}

@@ -2,6 +2,29 @@
 
 Este documento está dirigido al tester de la aplicación FIDO (Facilitador Inteligente de Dietas Organizadas). Aquí se describen las funcionalidades implementadas hasta ahora y los flujos que deben ser probados, junto con recomendaciones y casos de prueba sugeridos.
 
+## Cambios y Flujos Implementados (2 de agosto de 2025)
+
+### 1. Gestión de Horarios y Porciones por Mascota
+- Al presionar "Configurar horarios" en Home, se navega a la pantalla de horarios (EatTime) con la mascota seleccionada (por índice o por ID).
+- EatTime ahora selecciona automáticamente la mascota correcta cada vez que se navega desde Home, incluso si ya estaba abierta.
+- El selector de mascota en EatTime funciona tanto por índice como por ID (parámetro `selectedPetId` o `selectedPetIndex`).
+- Todos los cambios en horarios y porciones se editan localmente y solo se guardan en Firestore al presionar "Guardar Configuración".
+- Si hay cambios no guardados y el usuario intenta cambiar de mascota o salir de la pantalla, aparece un modal de advertencia personalizado (no Alert.alert) para confirmar si desea abandonar los cambios.
+
+### 2. Mejoras de Experiencia y Seguridad
+- El flujo de selección de mascota y navegación es consistente y reactivo.
+- El modal de advertencia de cambios no guardados bloquea la navegación hasta que el usuario confirme.
+- El flujo de contacto y validaciones sigue funcionando correctamente.
+
+### 3. Pruebas Sugeridas para Hoy
+- Cambiar de mascota en Home y presionar "Configurar horarios": debe abrir EatTime con la mascota correcta.
+- Cambiar de mascota dentro de EatTime con cambios no guardados: debe mostrar advertencia.
+- Salir de EatTime con cambios no guardados: debe mostrar advertencia.
+- Probar tanto pasando el índice como el ID de mascota en la navegación.
+- Confirmar que los cambios solo se guardan al presionar el botón correspondiente.
+
+---
+
 ## Funcionalidades Principales a Probar
 
 ### 1. Registro y Autenticación de Usuario
