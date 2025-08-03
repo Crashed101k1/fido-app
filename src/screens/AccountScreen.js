@@ -23,6 +23,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useNotifications } from '../context/NotificationContext';
 import { usePets } from '../hooks/usePets';
 import {
   View,
@@ -76,7 +77,31 @@ export default function AccountScreen({ navigation }) {
   // Mascotas en tiempo real
   const { pets } = usePets();
 
-  // ============ FUNCIONES DE MANEJO DE EVENTOS ============
+
+  // ============ NOTIFICACIONES ============
+  const { addNotification, removeNotification } = useNotifications();
+
+  // Notificación: Faltan campos en Mi Cuenta
+  useEffect(() => {
+    if (!currentUser) return;
+    const missingFields = !userInfo.name.trim() || !userInfo.phone.trim();
+    if (missingFields) {
+      addNotification({
+        id: 'account-missing-fields',
+        message: 'Completa tu información de cuenta para una mejor experiencia.',
+        icon: 'person-circle',
+        color: '#FF9800',
+        onPress: () => {
+          navigation.navigate('Account');
+          // Solo eliminar la notificación cuando los datos estén completos (ver efecto de userInfo)
+          return false;
+        }
+      });
+    } else {
+      removeNotification('account-missing-fields');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userInfo.name, userInfo.phone, currentUser]);
 
   /**
    * Función para alternar entre modo de visualización y edición del perfil

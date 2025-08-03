@@ -22,7 +22,8 @@
  * - React Navigation: Navegación entre pantallas
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNotifications } from '../context/NotificationContext';
 import { usePets } from '../hooks/usePets';
 import {
   View,
@@ -43,10 +44,66 @@ import { Ionicons } from '@expo/vector-icons';
  */
 export default function HomeScreen({ navigation }) {
   // ============ ESTADO LOCAL ============
+  const { addNotification, removeNotification } = useNotifications();
   const { pets, loading } = usePets();
   const [selectedPet, setSelectedPet] = useState(0);
 
-  // ============ DATOS DERIVADOS ============
+  // ============ NOTIFICACIONES ============
+  // Consolidar todas las notificaciones en un solo useEffect para evitar inconsistencias
+  useEffect(() => {
+    if (!pets) return;
+    
+    // Usuario nuevo: sin mascotas
+    if (pets.length === 0) {
+      addNotification({
+        id: 'add-first-pet',
+        message: '¡Bienvenido! Añade tu primera mascota para comenzar.',
+        icon: 'paw',
+        color: '#4CAF50',
+        onPress: () => {
+          navigation.navigate('MyPet');
+          return false;
+        }
+      });
+    } else {
+      removeNotification('add-first-pet');
+      
+      // Para cada mascota, verificar datos incompletos y configuración faltante
+      pets.forEach((pet) => {
+        // Datos incompletos
+        if (!pet.name || !pet.species || !pet.age || !pet.weight) {
+          addNotification({
+            id: `pet-incomplete-${pet.id}`,
+            message: `Completa los datos de ${pet.name || 'tu mascota'}.`,
+            icon: 'create',
+            color: '#FF9800',
+            onPress: () => {
+              navigation.navigate('MyPet', { selectedPetId: pet.id });
+              return false;
+            }
+          });
+        } else {
+          removeNotification(`pet-incomplete-${pet.id}`);
+        }
+        
+        // Horarios/porciones faltantes
+        if (!pet.hasFeedingTimes || !pet.hasPortions) {
+          addNotification({
+            id: `pet-config-${pet.id}`,
+            message: `Configura horarios y porciones para ${pet.name}.`,
+            icon: 'time',
+            color: '#2196F3',
+            onPress: () => {
+              navigation.navigate('EatTime', { selectedPetId: pet.id });
+              return false;
+            }
+          });
+        } else {
+          removeNotification(`pet-config-${pet.id}`);
+        }
+      });
+    }
+  }, [pets, addNotification, removeNotification, navigation]);
   
   /** Referencia a la mascota actualmente seleccionada */
   const currentPet = pets && pets.length > 0 ? pets[selectedPet] : null;

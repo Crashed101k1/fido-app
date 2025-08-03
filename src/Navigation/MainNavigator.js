@@ -26,11 +26,12 @@
  * - Assets locales: Logo de FIDO
  */
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import DrawerHeader from '../components/DrawerHeader';
 
 // Importar screens principales
 import HomeScreen from '../screens/HomeScreen';
@@ -45,63 +46,7 @@ import ContactScreen from '../screens/ContactScreen';
 const Tab = createBottomTabNavigator();
 const Drawer = createDrawerNavigator();
 
-/**
- * Componente de Header personalizado integrado
- * 
- * Proporciona una barra de navegación superior consistente con:
- * - Botón de menú hamburguesa para abrir el drawer
- * - Logo centrado de FIDO
- * - Botón de notificaciones
- * 
- * @param {Object} props - Propiedades del componente
- * @param {Object} props.navigation - Objeto de navegación
- * @returns {JSX.Element} Componente de header personalizado
- */
-function DrawerHeader({ navigation }) {
-  /**
-   * Función para abrir el drawer lateral
-   * @function handleMenuPress
-   * @returns {void}
-   */
-  const handleMenuPress = () => {
-    navigation.openDrawer();
-  };
-
-  /**
-   * Función para manejar las notificaciones
-   * En una aplicación real, esto abriría una pantalla de notificaciones
-   * @function handleNotificationPress
-   * @returns {void}
-   */
-  const handleNotificationPress = () => {
-    // Funcionalidad de notificaciones por implementar
-  };
-
-  return (
-    <View style={styles.header}>
-      {/* Botón de menú hamburguesa personalizado */}
-      <TouchableOpacity style={styles.menuButton} onPress={handleMenuPress}>
-        <View style={styles.menuLine} />
-        <View style={styles.menuLine} />
-        <View style={styles.menuLine} />
-      </TouchableOpacity>
-      
-      {/* Contenedor del logo centrado */}
-      <View style={styles.logoContainer}>
-        <Image 
-          source={require('../../assets/FIDO_LOGO.png')} 
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      
-      {/* Botón de notificaciones */}
-      <TouchableOpacity style={styles.notificationButton} onPress={handleNotificationPress}>
-        <Ionicons name="notifications-outline" size={24} color="#000" />
-      </TouchableOpacity>
-    </View>
-  );
-}
+// DrawerHeader ahora es importado desde components y usa SharedHeader con campana y notificaciones
 
 // Wrapper para las pantallas que incluye el header
 function ScreenWithHeader({ children, navigation }) {
@@ -115,6 +60,8 @@ function ScreenWithHeader({ children, navigation }) {
 
 // Custom Drawer Content
 function CustomDrawerContent({ navigation, state }) {
+  // Referencia global a EatTimeScreen
+  const eatTimeRef = global.eatTimeRef;
   // Obtener la ruta actual para determinar si mostrar "Inicio"
   const currentRoute = state.routes[state.index];
   const isInTabNavigator = currentRoute.name === 'TabNavigator';
@@ -175,13 +122,27 @@ function CustomDrawerContent({ navigation, state }) {
             key={`${item.screen}-${index}-${item.icon}`}
             style={styles.menuItem}
             onPress={() => {
+              // Si EatTime está activo y hay cambios sin guardar, interceptar
+              const navState = navigation.getState();
+              const tabNav = navState.routes.find(r => r.name === 'TabNavigator');
+              const tabIndex = tabNav?.state?.index ?? 0;
+              const tabRoute = tabNav?.state?.routes?.[tabIndex]?.name;
+              if (tabRoute === 'EatTime' && eatTimeRef && eatTimeRef.current && eatTimeRef.current.hasUnsavedChanges && eatTimeRef.current.hasUnsavedChanges()) {
+                eatTimeRef.current.showUnsavedModal(() => {
+                  if (item.screen === 'Login') {
+                    handleLogout();
+                  } else if (item.screen === 'TabNavigator') {
+                    navigation.navigate('TabNavigator', { screen: 'Home' });
+                  } else {
+                    navigation.navigate(item.screen);
+                  }
+                });
+                return;
+              }
               if (item.screen === 'Login') {
                 handleLogout();
               } else if (item.screen === 'TabNavigator') {
-                // Navegar al TabNavigator y específicamente a la pestaña Home
-                navigation.navigate('TabNavigator', { 
-                  screen: 'Home' 
-                });
+                navigation.navigate('TabNavigator', { screen: 'Home' });
               } else {
                 navigation.navigate(item.screen);
               }
@@ -202,6 +163,20 @@ function CustomDrawerContent({ navigation, state }) {
 
 // Tab Navigator principal que siempre está visible
 function MainTabNavigator() {
+  // Referencia para exponer función de comprobación desde EatTime
+  const eatTimeRef = useRef();
+  global.eatTimeRef = eatTimeRef;
+  // Handler para navegación de pestañas
+  const handleTabPress = (e, route, navigation) => {
+    if (route.name !== 'EatTime' && eatTimeRef.current && eatTimeRef.current.hasUnsavedChanges) {
+      if (eatTimeRef.current.hasUnsavedChanges()) {
+        e.preventDefault();
+        eatTimeRef.current.showUnsavedModal(() => {
+          navigation.navigate(route.name);
+        });
+      }
+    }
+  };
   return (
     <Tab.Navigator
       initialRouteName="Home"
@@ -274,6 +249,9 @@ function MainTabNavigator() {
       <Tab.Screen 
         name="Home"
         options={{ tabBarLabel: 'Inicio' }}
+        listeners={({ navigation, route }) => ({
+          tabPress: (e) => handleTabPress(e, route, navigation)
+        })}
       >
         {(props) => (
           <ScreenWithHeader navigation={props.navigation}>
@@ -285,6 +263,9 @@ function MainTabNavigator() {
       <Tab.Screen 
         name="MyPet"
         options={{ tabBarLabel: 'Mi Mascota' }}
+        listeners={({ navigation, route }) => ({
+          tabPress: (e) => handleTabPress(e, route, navigation)
+        })}
       >
         {(props) => (
           <ScreenWithHeader navigation={props.navigation}>
@@ -296,10 +277,13 @@ function MainTabNavigator() {
       <Tab.Screen 
         name="EatTime"
         options={{ tabBarLabel: 'Hora de Comer' }}
+        listeners={({ navigation, route }) => ({
+          tabPress: (e) => handleTabPress(e, route, navigation)
+        })}
       >
         {(props) => (
           <ScreenWithHeader navigation={props.navigation}>
-            <EatTimeScreen {...props} />
+            <EatTimeScreen {...props} ref={eatTimeRef} />
           </ScreenWithHeader>
         )}
       </Tab.Screen>
@@ -307,6 +291,9 @@ function MainTabNavigator() {
       <Tab.Screen 
         name="Statistics"
         options={{ tabBarLabel: 'Estadísticas' }}
+        listeners={({ navigation, route }) => ({
+          tabPress: (e) => handleTabPress(e, route, navigation)
+        })}
       >
         {(props) => (
           <ScreenWithHeader navigation={props.navigation}>

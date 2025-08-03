@@ -1,15 +1,14 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import NotificationBell from './NotificationBell';
 
 export default function SharedHeader({ navigation }) {
   const handleMenuPress = () => {
     navigation.openDrawer();
   };
 
-  const handleNotificationPress = () => {
-    // Funcionalidad de notificaciones
-  };
+
 
   return (
     <View style={styles.header}>
@@ -27,9 +26,9 @@ export default function SharedHeader({ navigation }) {
         />
       </View>
       
-      <TouchableOpacity style={styles.notificationButton} onPress={handleNotificationPress}>
-        <Ionicons name="notifications-outline" size={24} color="#000" />
-      </TouchableOpacity>
+      <View style={styles.notificationButton}>
+        <NotificationBell navigation={navigation} />
+      </View>
     </View>
   );
 }

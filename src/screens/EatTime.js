@@ -25,7 +25,8 @@
  */
 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+// import { useNotifications } from '../context/NotificationContext';
 import {
   View,
   Text,
@@ -494,15 +495,10 @@ const styles = StyleSheet.create({
   },
 });
 
-/**
- * Componente principal de la pantalla de configuración de horarios
- * 
- * @param {Object} props - Propiedades del componente
- * @param {Object} props.navigation - Objeto de navegación de React Navigation
- * @returns {JSX.Element} Componente de pantalla de horarios de alimentación
- */
 import { useFocusEffect } from '@react-navigation/native';
-export default function EatTimeScreen({ navigation, route }) {
+
+
+const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
   const { currentUser } = useAuth();
   const [pets, setPets] = useState([]);
   // Permitir selección inicial y sincronización de mascota vía parámetro (índice o ID)
@@ -733,11 +729,37 @@ export default function EatTimeScreen({ navigation, route }) {
     return !arrEq(feedingTimes, localFeedingTimes) || !arrEq(portions, localPortions);
   };
 
+  // Función para mostrar modal de cambios no guardados
+  const showUnsavedModal = (onConfirm) => {
+    setModalType('confirm');
+    setModalTitle('Cambios no guardados');
+    setModalMessage('¿Está seguro que desea abandonar? Los cambios no se guardarán.');
+    setModalActions([
+      { text: 'Cancelar', onPress: () => { setModalVisible(false); setPendingPetIndex(null); }, style: 'cancel' },
+      { text: 'Abandonar', onPress: () => {
+          setModalVisible(false);
+          setPendingPetIndex(null);
+          if (onConfirm) onConfirm();
+        }, style: 'destructive' }
+    ]);
+    setModalVisible(true);
+  };
+
   // Handler para cambio de mascota
   const handlePetSelect = (index) => {
     if (index === selectedPetIndex) return;
     if (hasUnsavedChanges()) {
       setPendingPetIndex(index);
+      showUnsavedModal(() => setSelectedPetIndex(index));
+    } else {
+      setSelectedPetIndex(index);
+    }
+  };
+
+  // Exponer métodos para navegación de tabs
+  useImperativeHandle(ref, () => ({
+    hasUnsavedChanges,
+    showUnsavedModal: (onConfirm) => {
       setModalType('confirm');
       setModalTitle('Cambios no guardados');
       setModalMessage('¿Está seguro que desea abandonar? Los cambios no se guardarán.');
@@ -746,16 +768,14 @@ export default function EatTimeScreen({ navigation, route }) {
         { text: 'Abandonar', onPress: () => {
             setModalVisible(false);
             setPendingPetIndex(null);
-            setSelectedPetIndex(index);
+            if (onConfirm) onConfirm();
           }, style: 'destructive' }
       ]);
       setModalVisible(true);
-    } else {
-      setSelectedPetIndex(index);
     }
-  };
+  }));
 
-  // Bloquear navegación si hay cambios no guardados
+  // Bloquear navegación si hay cambios no guardados (solo para back stack)
   useFocusEffect(
     React.useCallback(() => {
       const beforeRemoveListener = (e) => {
@@ -973,4 +993,5 @@ export default function EatTimeScreen({ navigation, route }) {
       />
     </View>
   );
-}
+});
+export default EatTimeScreen;

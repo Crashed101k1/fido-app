@@ -25,6 +25,7 @@
  */
 
 import React, { useState, useEffect } from "react";
+import { useNotifications } from '../context/NotificationContext';
 import { usePets } from '../hooks/usePets';
 import {
   View,
@@ -50,6 +51,7 @@ const { width, height } = Dimensions.get("window");
  * @returns {JSX.Element} Componente de pantalla de gestión de mascotas
  */
 export default function MyPetScreen({ navigation }) {
+  const { addNotification, removeNotification } = useNotifications();
   const { pets, addPet, updatePet, deletePet } = usePets();
   const [selectedPetIndex, setSelectedPetIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
@@ -78,11 +80,32 @@ export default function MyPetScreen({ navigation }) {
   const currentPet = pets[selectedPetIndex] || null;
 
   // Efectos
+  // Notificación de datos incompletos por mascota
   useEffect(() => {
     if (pets.length > 0 && pets[selectedPetIndex]) {
       setEditingPet({ ...pets[selectedPetIndex] });
+      const pet = pets[selectedPetIndex];
+      const missingFields = [
+        !pet.name,
+        !pet.species,
+        ((pet.species === "Perro" || pet.species === "Gato") && !pet.breed),
+        !pet.age,
+        !pet.weight,
+        !pet.gender
+      ];
+      if (missingFields.some(Boolean)) {
+        addNotification({
+          id: `pet-incomplete-${pet.id}`,
+          message: `${pet.name || 'Tu mascota'} tiene datos sin completar en su registro`,
+          icon: 'alert-circle',
+          color: '#FF9800',
+          // No incluir onPress aquí, la navegación se maneja desde HomeScreen
+        });
+      } else {
+        removeNotification(`pet-incomplete-${pet.id}`);
+      }
     }
-  }, [selectedPetIndex, pets]);
+  }, [selectedPetIndex, pets, addNotification, removeNotification]);
   useEffect(() => {
     if (selectedPetIndex >= pets.length && pets.length > 0) {
       setSelectedPetIndex(pets.length - 1);
