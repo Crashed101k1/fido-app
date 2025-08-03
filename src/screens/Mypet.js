@@ -27,6 +27,7 @@
 import React, { useState, useEffect } from "react";
 import { useNotifications } from '../context/NotificationContext';
 import { usePets } from '../hooks/usePets';
+import { getPetIconInfo } from '../utils/petIcons';
 import {
   View,
   Text,
@@ -97,8 +98,8 @@ export default function MyPetScreen({ navigation }) {
         addNotification({
           id: `pet-incomplete-${pet.id}`,
           message: `${pet.name || 'Tu mascota'} tiene datos sin completar en su registro`,
-          icon: 'alert-circle',
-          color: '#FF9800',
+          icon: pet.species ? getPetIconInfo(pet.species).name : 'alert-circle',
+          color: pet.species ? getPetIconInfo(pet.species).speciesColor : '#FF9800',
           // No incluir onPress aquí, la navegación se maneja desde HomeScreen
         });
       } else {
@@ -261,9 +262,9 @@ export default function MyPetScreen({ navigation }) {
                     >
                       <View style={styles.petCardAvatar}>
                         <Ionicons 
-                          name="paw" 
+                          name={getPetIconInfo(pet.species, selectedPetIndex === index).name}
                           size={30} 
-                          color={selectedPetIndex === index ? "#FFFFFF" : "#4CAF50"} 
+                          color={getPetIconInfo(pet.species, selectedPetIndex === index).color}
                         />
                       </View>
                       <Text style={[
@@ -297,7 +298,7 @@ export default function MyPetScreen({ navigation }) {
                 <View style={styles.petHeader}>
                   <View style={styles.petAvatarContainer}>
                     <View style={styles.petAvatar}>
-                      <Ionicons name="paw" size={60} color="#000" />
+                      <Ionicons name={currentPet ? getPetIconInfo(currentPet.species).name : 'paw'} size={60} color={currentPet ? getPetIconInfo(currentPet.species).speciesColor : '#000'} />
                     </View>
                   </View>
                   
@@ -347,7 +348,12 @@ export default function MyPetScreen({ navigation }) {
                 {/* Formulario visualmente mejorado y optimizado */}
                 <View style={styles.formGridModern}>
                   <View style={styles.formSectionHeader}>
-                    <Ionicons name="paw" size={28} color="#7C3AED" style={{ marginRight: 10 }} />
+                    <Ionicons 
+                      name={currentPet ? getPetIconInfo(currentPet.species).name : 'paw'} 
+                      size={28} 
+                      color={currentPet ? getPetIconInfo(currentPet.species).speciesColor : '#7C3AED'} 
+                      style={{ marginRight: 10 }} 
+                    />
                     <Text style={styles.formSectionTitle}>Datos de la Mascota</Text>
                   </View>
                   {renderFormField({
@@ -361,8 +367,8 @@ export default function MyPetScreen({ navigation }) {
                   })}
                   <View style={styles.formSeparator} />
                   {renderFormField({
-                    icon: "leaf",
-                    color: "#7C3AED",
+                    icon: currentPet ? getPetIconInfo(currentPet.species).name : "leaf",
+                    color: currentPet ? getPetIconInfo(currentPet.species).speciesColor : "#7C3AED",
                     label: "Especie",
                     value: editingPet.species ?? "",
                     onChange: value => updateEditingPetField("species", value),
@@ -490,7 +496,15 @@ export default function MyPetScreen({ navigation }) {
       <Modal visible={showAddPetModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Agregar Nueva Mascota</Text>
+            <View style={styles.modalTitleContainer}>
+              <Ionicons 
+                name={getPetIconInfo(newPet.species).name} 
+                size={32} 
+                color={getPetIconInfo(newPet.species).speciesColor} 
+                style={{ marginBottom: 10 }}
+              />
+              <Text style={styles.modalTitle}>Agregar Nueva Mascota</Text>
+            </View>
             <TextInput
               style={styles.modalInput}
               placeholder="Nombre de la mascota"
@@ -1009,6 +1023,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
     letterSpacing: 0.5,
+  },
+  modalTitleContainer: {
+    alignItems: "center",
+    marginBottom: 10,
   },
   modalInput: {
     backgroundColor: "#F5F5F5",

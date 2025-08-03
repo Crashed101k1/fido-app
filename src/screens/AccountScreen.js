@@ -25,6 +25,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNotifications } from '../context/NotificationContext';
 import { usePets } from '../hooks/usePets';
+import { getPetIconInfo } from '../utils/petIcons';
 import {
   View,
   Text,
@@ -274,9 +275,9 @@ export default function AccountScreen({ navigation }) {
                     <View key={pet.id} style={styles.petItem}>
                       <View style={styles.petInfo}>
                         <Ionicons
-                          name={pet.species === 'Perro' ? 'paw' : pet.species === 'Gato' ? 'logo-octocat' : 'fish'}
+                          name={getPetIconInfo(pet.species).name}
                           size={20}
-                          color="#4CAF50"
+                          color={getPetIconInfo(pet.species).speciesColor}
                           style={styles.petIcon}
                         />
                         <View style={styles.petDetails}>

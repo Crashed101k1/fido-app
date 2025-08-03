@@ -27,6 +27,7 @@
 
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 // import { useNotifications } from '../context/NotificationContext';
+import { getPetIconInfo } from '../utils/petIcons';
 import {
   View,
   Text,
@@ -827,9 +828,9 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
                   onPress={() => handlePetSelect(index)}
                 >
                   <Ionicons
-                    name={pet.species === 'Perro' ? 'paw' : 'fish'}
+                    name={getPetIconInfo(pet.species, selectedPetIndex === index).name}
                     size={24}
-                    color={selectedPetIndex === index ? '#FFFFFF' : '#4CAF50'}
+                    color={getPetIconInfo(pet.species, selectedPetIndex === index).color}
                   />
                   <Text style={[
                     styles.petSelectorName,
@@ -851,9 +852,9 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
             <View style={styles.currentPetInfo}>
               <View style={styles.currentPetHeader}>
                 <Ionicons
-                  name={currentPet.species === 'Perro' ? 'paw' : 'fish'}
+                  name={getPetIconInfo(currentPet.species).name}
                   size={30}
-                  color="#4CAF50"
+                  color={getPetIconInfo(currentPet.species).speciesColor}
                 />
                 <View style={styles.currentPetDetails}>
                   <Text style={styles.currentPetName}>{currentPet.name}</Text>

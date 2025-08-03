@@ -1,4 +1,5 @@
 import React from 'react';
+import { getPetIconInfo } from '../utils/petIcons';
 import {
   View,
   Text,
@@ -140,7 +141,7 @@ export default function AboutScreen({ navigation }) {
               Agradecemos a todos los que confiaron y alos que no confiaron por darnos un motivos más para cumplir esta meta
             </Text>
             <View style={styles.pawContainer}>
-              <Ionicons name="paw" size={40} color="#FFD54F" />
+              <Ionicons name={getPetIconInfo('perro').name} size={40} color="#FFD54F" />
             </View>
           </View>
         </View>

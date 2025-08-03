@@ -25,6 +25,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNotifications } from '../context/NotificationContext';
 import { usePets } from '../hooks/usePets';
+import { getPetIconInfo } from '../utils/petIcons';
 import {
   View,
   Text,
@@ -75,8 +76,8 @@ export default function HomeScreen({ navigation }) {
           addNotification({
             id: `pet-incomplete-${pet.id}`,
             message: `Completa los datos de ${pet.name || 'tu mascota'}.`,
-            icon: 'create',
-            color: '#FF9800',
+            icon: pet.species ? getPetIconInfo(pet.species).name : 'create',
+            color: pet.species ? getPetIconInfo(pet.species).speciesColor : '#FF9800',
             onPress: () => {
               navigation.navigate('MyPet', { selectedPetId: pet.id });
               return false;
@@ -91,8 +92,8 @@ export default function HomeScreen({ navigation }) {
           addNotification({
             id: `pet-config-${pet.id}`,
             message: `Configura horarios y porciones para ${pet.name}.`,
-            icon: 'time',
-            color: '#2196F3',
+            icon: pet.species ? getPetIconInfo(pet.species).name : 'time',
+            color: pet.species ? getPetIconInfo(pet.species).speciesColor : '#2196F3',
             onPress: () => {
               navigation.navigate('EatTime', { selectedPetId: pet.id });
               return false;
@@ -104,6 +105,13 @@ export default function HomeScreen({ navigation }) {
       });
     }
   }, [pets, addNotification, removeNotification, navigation]);
+  
+  // Asegurar que selectedPet sea válido cuando cambie la lista de mascotas
+  useEffect(() => {
+    if (pets && pets.length > 0 && selectedPet >= pets.length) {
+      setSelectedPet(0);
+    }
+  }, [pets, selectedPet]);
   
   /** Referencia a la mascota actualmente seleccionada */
   const currentPet = pets && pets.length > 0 ? pets[selectedPet] : null;
@@ -222,9 +230,9 @@ export default function HomeScreen({ navigation }) {
                     onPress={() => setSelectedPet(index)}
                   >
                     <Ionicons
-                      name={pet.species === 'Perro' ? 'paw' : 'fish'}
+                      name={getPetIconInfo(pet.species, selectedPet === index).name}
                       size={24}
-                      color={selectedPet === index ? '#FFFFFF' : '#4CAF50'}
+                      color={getPetIconInfo(pet.species, selectedPet === index).color}
                     />
                     <Text style={[
                       styles.petSelectorName,
@@ -249,14 +257,19 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.currentPetInfo}>
             <View style={styles.currentPetHeader}>
               <Ionicons
-                name={currentPet && currentPet.species === 'Perro' ? 'paw' : 'fish'}
+                name={currentPet ? getPetIconInfo(currentPet.species).name : 'paw'}
                 size={30}
-                color="#4CAF50"
+                color={currentPet ? getPetIconInfo(currentPet.species).speciesColor : '#4CAF50'}
               />
               <View style={styles.currentPetDetails}>
                 <Text style={styles.currentPetName}>{currentPet ? currentPet.name : 'Sin mascota'}</Text>
                 <Text style={styles.currentPetSpecies}>{currentPet ? currentPet.species : ''}</Text>
               </View>
+              {currentPet && (
+                <View style={styles.petSelectedIndicator}>
+                  <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                </View>
+              )}
             </View>
           </View>
 
@@ -488,6 +501,9 @@ const styles = StyleSheet.create({
   currentPetSpecies: {
     fontSize: 14,
     color: '#666',
+  },
+  petSelectedIndicator: {
+    marginLeft: 10,
   },
 
   // Cards de información
