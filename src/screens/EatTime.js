@@ -1,32 +1,4 @@
-/**
- * FIDO - Pantalla de Configuración de Horarios de Alimentación
- * 
- * Esta pantalla permite a los usuarios configurar horarios y porciones
- * de alimentación específicos para cada mascota del sistema.
- * 
- * Funcionalidades principales:
- * - Selector de mascotas con información individual
- * - Configuración de horarios de alimentación (hasta 3 por mascota)
- * - Configuración de tamaños de porción personalizados
- * - Habilitación/deshabilitación de horarios específicos
- * - Modales responsivos para edición de horarios y porciones
- * - Validación de entrada de datos
- * 
- * Características del diseño:
- * - Sistema multi-mascota con datos individuales
- * - Interfaz intuitiva con toggles para horarios
- * - Modales adaptativos para diferentes tamaños de pantalla
- * - Validación en tiempo real de configuraciones
- * 
- * Dependencias:
- * - React Native: Componentes básicos, modales, scroll
- * - Expo Vector Icons: Iconografía consistente
- * - React Native Picker: Selectores de tiempo y porción
- */
-
-
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-// import { useNotifications } from '../context/NotificationContext';
 import { getPetIconInfo } from '../utils/petIcons';
 import {
   View,
@@ -42,29 +14,51 @@ import { Picker } from '@react-native-picker/picker';
 import { db } from '../../firebaseConfig';
 
 // --- MODALES COMO COMPONENTES EXTERNOS ---
-const TimeModal = ({ visible, onCancel, onAdd, newTimeHour, setNewTimeHour, newTimePeriod, setNewTimePeriod, currentPet }) => (
+const TimeModal = ({ visible, onCancel, onAdd, newTimeHour, setNewTimeHour, newTimeMinutes, setNewTimeMinutes, newTimePeriod, setNewTimePeriod, currentPet }) => (
   <Modal visible={visible} transparent animationType="slide">
     <View style={styles.modalOverlay}>
       <View style={styles.modalContent}>
         <Text style={styles.modalTitle}>Agregar Nuevo Horario para {currentPet?.name || ''}</Text>
         <View style={styles.timePickerContainer}>
-          <Picker
-            selectedValue={newTimeHour}
-            style={styles.timePicker}
-            onValueChange={setNewTimeHour}
-          >
-            {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => (
-              <Picker.Item key={hour} label={hour.toString()} value={hour.toString()} />
-            ))}
-          </Picker>
-          <Picker
-            selectedValue={newTimePeriod}
-            style={styles.timePicker}
-            onValueChange={setNewTimePeriod}
-          >
-            <Picker.Item label="AM" value="am" />
-            <Picker.Item label="PM" value="pm" />
-          </Picker>
+          <View style={styles.pickerSection}>
+            <Text style={styles.pickerLabel}>Hora</Text>
+            <Picker
+              selectedValue={newTimeHour}
+              style={styles.timePicker}
+              onValueChange={setNewTimeHour}
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => (
+                <Picker.Item key={hour} label={hour.toString()} value={hour.toString()} />
+              ))}
+            </Picker>
+          </View>
+          <View style={styles.pickerSection}>
+            <Text style={styles.pickerLabel}>Minutos</Text>
+            <Picker
+              selectedValue={newTimeMinutes}
+              style={styles.timePicker}
+              onValueChange={setNewTimeMinutes}
+            >
+              {Array.from({ length: 12 }, (_, i) => i * 5).map(minutes => (
+                <Picker.Item 
+                  key={minutes} 
+                  label={minutes.toString().padStart(2, '0')} 
+                  value={minutes.toString()} 
+                />
+              ))}
+            </Picker>
+          </View>
+          <View style={styles.pickerSection}>
+            <Text style={styles.pickerLabel}>Período</Text>
+            <Picker
+              selectedValue={newTimePeriod}
+              style={styles.timePicker}
+              onValueChange={setNewTimePeriod}
+            >
+              <Picker.Item label="AM" value="am" />
+              <Picker.Item label="PM" value="pm" />
+            </Picker>
+          </View>
         </View>
         <View style={styles.modalButtons}>
           <TouchableOpacity 
@@ -449,9 +443,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', 
     marginBottom: 20 
   },
-  timePicker: { 
+  pickerSection: {
     flex: 1,
+    alignItems: 'center',
     marginHorizontal: 5,
+  },
+  pickerLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  timePicker: { 
+    width: '100%',
   },
   portionInput: { 
     borderWidth: 1, 
@@ -504,7 +508,7 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
   const [pets, setPets] = useState([]);
   // Permitir selección inicial y sincronización de mascota vía parámetro (índice o ID)
   const [selectedPetIndex, setSelectedPetIndex] = useState(() => {
-    if (route?.params?.selectedPetId) return 0; // temporal, se ajusta en useEffect
+    if (route?.params?.selectedPetId) return 0;
     return route?.params?.selectedPetIndex ?? 0;
   });
 
@@ -532,6 +536,7 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
   const [showTimeModal, setShowTimeModal] = useState(false);
   const [showPortionModal, setShowPortionModal] = useState(false);
   const [newTimeHour, setNewTimeHour] = useState('1');
+  const [newTimeMinutes, setNewTimeMinutes] = useState('0');
   const [newTimePeriod, setNewTimePeriod] = useState('pm');
   const [newPortion, setNewPortion] = useState('');
 
@@ -571,8 +576,8 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
     }
     const feedingRef = collection(db, 'pets', currentPet.id, 'feedingTimes');
     const portionsRef = collection(db, 'pets', currentPet.id, 'portions');
-    const unsub1 = onSnapshot(query(feedingRef, orderBy('time')), (snap) => {
-      const times = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const unsub1 = onSnapshot(query(feedingRef, orderBy('timeOrder', 'asc')), (snap) => {
+      let times = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setFeedingTimes(times);
       setLocalFeedingTimes(times);
     });
@@ -596,13 +601,21 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
 
   const addNewTime = () => {
     if (!newTimeHour) return;
-    const timeString = `${newTimeHour}${newTimePeriod}`;
     setLocalFeedingTimes(times => ([
       ...times,
-      { id: `local-${Date.now()}`, time: timeString, enabled: true, local: true }
+      {
+        id: `local-${Date.now()}`,
+        hour: newTimeHour,
+        minutes: newTimeMinutes,
+        period: newTimePeriod,
+        enabled: true,
+        local: true,
+        timeOrder: calculateTimeOrder(newTimeHour, newTimeMinutes, newTimePeriod)
+      }
     ]));
     setShowTimeModal(false);
     setNewTimeHour('1');
+    setNewTimeMinutes('0');
     setNewTimePeriod('pm');
   };
 
@@ -662,6 +675,14 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
   };
 
   // GUARDAR EN FIRESTORE AL PRESIONAR BOTÓN
+  const calculateTimeOrder = (hour, minutes, period) => {
+    let hourNum = parseInt(hour);
+    const minutesNum = parseInt(minutes || '0');
+    if (period === 'pm' && hourNum !== 12) hourNum += 12;
+    if (period === 'am' && hourNum === 12) hourNum = 0;
+    return hourNum * 60 + minutesNum;
+  };
+
   const saveConfig = async () => {
     if (!currentPet) return;
     // Guardar horarios
@@ -674,16 +695,22 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
     const toAddTimes = localFeedingTimes.filter(lt => lt.local);
     for (const t of toAddTimes) {
       await addDoc(collection(db, 'pets', currentPet.id, 'feedingTimes'), {
-        time: t.time,
-        enabled: t.enabled
+        hour: t.hour,
+        minutes: t.minutes || '0',
+        period: t.period,
+        enabled: t.enabled,
+        timeOrder: calculateTimeOrder(t.hour, t.minutes || '0', t.period)
       });
     }
     // 3. Actualizar existentes
     const toUpdateTimes = localFeedingTimes.filter(lt => !lt.local);
     for (const t of toUpdateTimes) {
       await updateDoc(doc(db, 'pets', currentPet.id, 'feedingTimes', t.id), {
-        time: t.time,
-        enabled: t.enabled
+        hour: t.hour,
+        minutes: t.minutes || '0',
+        period: t.period,
+        enabled: t.enabled,
+        timeOrder: calculateTimeOrder(t.hour, t.minutes || '0', t.period)
       });
     }
 
@@ -717,17 +744,64 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
       { text: 'OK', onPress: () => setModalVisible(false), style: 'default' }
     ]);
     setModalVisible(true);
+
+    // Sincronizar arrays locales después del guardado
+    // Remover la propiedad 'local' de los elementos guardados
+    setLocalFeedingTimes(times => times.map(t => {
+      const { local, ...rest } = t;
+      return rest;
+    }));
+    setLocalPortions(portions => portions.map(p => {
+      const { local, ...rest } = p;
+      return rest;
+    }));
   };
 
   // Función para detectar cambios no guardados
   const hasUnsavedChanges = () => {
-    // Compara los arrays de objetos (ignora el campo local)
-    const clean = arr => arr.map(o => {
-      const { local, ...rest } = o;
-      return rest;
-    });
-    const arrEq = (a, b) => JSON.stringify(clean(a)) === JSON.stringify(clean(b));
-    return !arrEq(feedingTimes, localFeedingTimes) || !arrEq(portions, localPortions);
+    // Función para comparar arrays de horarios
+    const arrEqTimes = (a, b) => {
+      // Filtrar elementos locales de 'a' (localFeedingTimes)
+      const aFiltered = a.filter(item => !item.local);
+      
+      if (aFiltered.length !== b.length) return false;
+      
+      // Ordenar por timeOrder para comparación consistente
+      const aSorted = aFiltered.sort((x, y) => (x.timeOrder || 0) - (y.timeOrder || 0));
+      const bSorted = b.sort((x, y) => (x.timeOrder || 0) - (y.timeOrder || 0));
+      
+      for (let i = 0; i < aSorted.length; i++) {
+        if (
+          aSorted[i].hour !== bSorted[i].hour ||
+          (aSorted[i].minutes || '0') !== (bSorted[i].minutes || '0') ||
+          aSorted[i].period !== bSorted[i].period ||
+          aSorted[i].enabled !== bSorted[i].enabled
+        ) return false;
+      }
+      return true;
+    };
+
+    // Función para comparar arrays de porciones
+    const arrEqPortions = (a, b) => {
+      // Filtrar elementos locales de 'a' (localPortions)
+      const aFiltered = a.filter(item => !item.local);
+      
+      if (aFiltered.length !== b.length) return false;
+      
+      // Ordenar por amount para comparación consistente
+      const aSorted = aFiltered.sort((x, y) => parseInt(x.amount) - parseInt(y.amount));
+      const bSorted = b.sort((x, y) => parseInt(x.amount) - parseInt(y.amount));
+      
+      for (let i = 0; i < aSorted.length; i++) {
+        if (
+          aSorted[i].amount !== bSorted[i].amount ||
+          aSorted[i].selected !== bSorted[i].selected
+        ) return false;
+      }
+      return true;
+    };
+
+    return !arrEqTimes(feedingTimes, localFeedingTimes) || !arrEqPortions(portions, localPortions);
   };
 
   // Función para mostrar modal de cambios no guardados
@@ -891,7 +965,7 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
                     onPress={() => toggleFeedingTime(time.id, time.enabled)}
                   >
                     <Text style={[styles.timeText, !time.enabled && styles.timeTextDisabled]}>
-                      {time.time}
+                      {time.hour}:{(time.minutes || '0').padStart(2, '0')} {time.period ? time.period.toUpperCase() : 'AM'}
                     </Text>
                     <Ionicons
                       name={time.enabled ? 'checkmark-circle' : 'ellipse-outline'}
@@ -973,6 +1047,8 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
         onAdd={addNewTime}
         newTimeHour={newTimeHour}
         setNewTimeHour={setNewTimeHour}
+        newTimeMinutes={newTimeMinutes}
+        setNewTimeMinutes={setNewTimeMinutes}
         newTimePeriod={newTimePeriod}
         setNewTimePeriod={setNewTimePeriod}
         currentPet={currentPet}

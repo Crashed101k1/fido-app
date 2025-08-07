@@ -25,7 +25,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNotifications } from '../context/NotificationContext';
 import { usePets } from '../hooks/usePets';
+import { useFeedingData, useDispenserData } from '../hooks/useFeedingData';
 import { getPetIconInfo } from '../utils/petIcons';
+import { formatDate, formatFutureDate, formatPercentageWithColor } from '../utils/dateUtils';
+import { collection, addDoc } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
 import {
   View,
   Text,
@@ -44,17 +48,13 @@ import { Ionicons } from '@expo/vector-icons';
  * @returns {JSX.Element} Componente de pantalla principal
  */
 export default function HomeScreen({ navigation }) {
-  // ============ ESTADO LOCAL ============
   const { addNotification, removeNotification } = useNotifications();
   const { pets, loading } = usePets();
   const [selectedPet, setSelectedPet] = useState(0);
 
-  // ============ NOTIFICACIONES ============
-  // Consolidar todas las notificaciones en un solo useEffect para evitar inconsistencias
   useEffect(() => {
     if (!pets) return;
     
-    // Usuario nuevo: sin mascotas
     if (pets.length === 0) {
       addNotification({
         id: 'add-first-pet',
@@ -69,9 +69,7 @@ export default function HomeScreen({ navigation }) {
     } else {
       removeNotification('add-first-pet');
       
-      // Para cada mascota, verificar datos incompletos y configuración faltante
       pets.forEach((pet) => {
-        // Datos incompletos
         if (!pet.name || !pet.species || !pet.age || !pet.weight) {
           addNotification({
             id: `pet-incomplete-${pet.id}`,
@@ -86,8 +84,7 @@ export default function HomeScreen({ navigation }) {
         } else {
           removeNotification(`pet-incomplete-${pet.id}`);
         }
-        
-        // Horarios/porciones faltantes
+
         if (!pet.hasFeedingTimes || !pet.hasPortions) {
           addNotification({
             id: `pet-config-${pet.id}`,
@@ -105,39 +102,43 @@ export default function HomeScreen({ navigation }) {
       });
     }
   }, [pets, addNotification, removeNotification, navigation]);
-  
-  // Asegurar que selectedPet sea válido cuando cambie la lista de mascotas
+
+  /**
+   * Registra una alimentación inmediata en Firebase
+   */
+  const addFeedingRecord = async (petId) => {
+    try {
+      const now = new Date();
+      
+      await addDoc(collection(db, 'feedingRecords'), {
+        petId: petId,
+        timestamp: now.toISOString(),
+        type: 'manual',
+        source: 'dispenser',
+        createdAt: now.toISOString()
+      });
+      
+    } catch (error) {
+      throw error;
+    }
+  };
+
   useEffect(() => {
     if (pets && pets.length > 0 && selectedPet >= pets.length) {
       setSelectedPet(0);
     }
   }, [pets, selectedPet]);
   
-  /** Referencia a la mascota actualmente seleccionada */
   const currentPet = pets && pets.length > 0 ? pets[selectedPet] : null;
+  
+  const feedingData = useFeedingData(currentPet?.id);
+  const dispenserData = useDispenserData(currentPet?.dispenserId);
 
-  // ============ FUNCIONES DE MANEJO DE EVENTOS ============
-
-  /**
-   * Función para manejar el dispensado manual de comida
-   * 
-   * Verifica que la mascota tenga un dispensador conectado antes de permitir
-   * el dispensado. Si no tiene dispensador, muestra un alert con opciones
-   * para navegar a la pantalla de configuración.
-   * 
-   * Flujo de ejecución:
-   * 1. Verificar si la mascota tiene dispensador asignado
-   * 2. Si no tiene, mostrar alert con opción de ir a configuración
-   * 3. Si tiene, proceder con el dispensado y mostrar confirmación
-   * 
-   * @function handleDispenseNow
-   * @returns {void}
-   */
-  const handleDispenseNow = () => {
-    if (!currentPet.dispenserId) {
+  const handleDispenseNow = async () => {
+    if (!currentPet?.dispenserId) {
       Alert.alert(
         'Dispensador No Conectado',
-        `${currentPet.name} no tiene un dispensador asignado. Ve a "Mi Mascota" para conectar un dispositivo.`,
+        `${currentPet?.name || 'La mascota'} no tiene un dispensador asignado. Ve a "Mi Mascota" para conectar un dispositivo.`,
         [
           { text: 'Cancelar', style: 'cancel' },
           { text: 'Ir a Mi Mascota', onPress: () => navigation.navigate('MyPet') }
@@ -146,24 +147,35 @@ export default function HomeScreen({ navigation }) {
       return;
     }
 
-    // Si la mascota tiene dispensador conectado, proceder con el dispensado
-    Alert.alert(
-      'Dispensando Comida',
-      `Dispensando porción para ${currentPet.name}...`,
-      [{ text: "OK" }]
-    );
+    if (!dispenserData.isOnline) {
+      Alert.alert(
+        'Dispensador Desconectado',
+        'El dispensador no está conectado. Verifica la conexión WiFi del dispositivo.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    try {
+      // Por ahora, solo registrar el dispensado en Firebase
+      // La integración MQTT se implementará en la siguiente fase
+      await addFeedingRecord(currentPet.id);
+
+      Alert.alert(
+        'Dispensado Registrado',
+        `Se registró el dispensado para ${currentPet.name}`,
+        [{ text: "OK" }]
+      );
+
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        `No se pudo registrar el dispensado: ${error.message}`,
+        [{ text: "OK" }]
+      );
+    }
   };
 
-  // ============ ESTRUCTURA DE RENDERIZADO ============
-  
-  /**
-   * Estructura de la pantalla principal:
-   * 1. Estado del dispensador (información prioritaria)
-   * 2. Selector de mascotas horizontal
-   * 3. Información de la mascota seleccionada
-   * 4. Botones de acción principal
-   * 5. Accesos rápidos a otras pantallas
-   */
   return (
     <View style={styles.container}>
       <ScrollView
@@ -275,35 +287,157 @@ export default function HomeScreen({ navigation }) {
 
           {/* Cards de información */}
           <View style={styles.cardsContainer}>
+            {/* Card: Última Comida */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <Ionicons name="time" size={20} color="#FF9800" />
                 <Text style={styles.cardTitle}>Última Comida</Text>
               </View>
-              <Text style={styles.cardValue}>{currentPet && currentPet.lastFeed ? currentPet.lastFeed : 'Sin registro'}</Text>
-              <Text style={styles.cardSubtitle}>Registro más reciente</Text>
+              {feedingData.loading ? (
+                <Text style={styles.cardValue}>Cargando...</Text>
+              ) : feedingData.noSchedules ? (
+                <>
+                  <Text style={styles.cardValue}>No hay horarios configurados</Text>
+                  <Text style={styles.cardSubtitle}>Configura horarios primero</Text>
+                </>
+              ) : feedingData.feedingHistory && feedingData.feedingHistory.length > 0 ? (
+                <>
+                  <Text style={styles.cardValue}>
+                    {feedingData.feedingHistory[0].timestamp 
+                      ? new Date(feedingData.feedingHistory[0].timestamp).toLocaleTimeString('es-ES', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })
+                      : 'Sin registro'
+                    }
+                  </Text>
+                  <Text style={styles.cardSubtitle}>Último dispensado registrado</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.cardValue}>Sin registro hoy</Text>
+                  <Text style={styles.cardSubtitle}>No hay dispensados registrados</Text>
+                </>
+              )}
             </View>
 
+            {/* Card: Próxima Comida */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <Ionicons name="alarm" size={20} color="#2196F3" />
                 <Text style={styles.cardTitle}>Próxima Comida</Text>
               </View>
-              <Text style={styles.cardValue}>{currentPet && currentPet.nextFeed ? currentPet.nextFeed : 'No programado'}</Text>
-              <Text style={styles.cardSubtitle}>Siguiente horario programado</Text>
+              {feedingData.loading ? (
+                <Text style={styles.cardValue}>Cargando...</Text>
+              ) : feedingData.noSchedules ? (
+                <>
+                  <Text style={styles.cardValue}>No hay horarios configurados</Text>
+                  <Text style={styles.cardSubtitle}>Configura horarios en la mascota</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.cardValue}>
+                    {feedingData.nextFeed 
+                      ? feedingData.nextFeed.displayTime 
+                      : 'No programado'
+                    }
+                  </Text>
+                  <Text style={styles.cardSubtitle}>
+                    {feedingData.nextFeed 
+                      ? (feedingData.nextFeed.isToday ? 'Hoy' : 'Mañana')
+                      : 'Ve a "Configurar Horarios"'
+                    }
+                  </Text>
+                </>
+              )}
             </View>
 
+            {/* Card: Progreso Hoy */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
                 <Text style={styles.cardTitle}>Progreso Hoy</Text>
               </View>
-              <Text style={styles.cardValue}>
-                {currentPet && typeof currentPet.completedToday === 'number' && typeof currentPet.dailyPortions === 'number'
-                  ? `${currentPet.completedToday}/${currentPet.dailyPortions}`
-                  : '0/0'}
+              {feedingData.loading ? (
+                <Text style={styles.cardValue}>Cargando...</Text>
+              ) : feedingData.noSchedules ? (
+                <>
+                  <Text style={styles.cardValue}>Sin horarios</Text>
+                  <Text style={styles.cardSubtitle}>Configura horarios de alimentación</Text>
+                </>
+              ) : (
+                <View style={styles.cardProgressContainer}>
+                  <Text style={styles.cardValue}>
+                    {`${feedingData.todayProgress?.completed || 0}/${feedingData.todayProgress?.total || 0}`}
+                  </Text>
+                  <View style={styles.progressBarContainer}>
+                    <View 
+                      style={[
+                        styles.progressBar, 
+                        { 
+                          width: `${feedingData.todayProgress?.percentage || 0}%`,
+                          backgroundColor: (feedingData.todayProgress?.percentage || 0) >= 100 ? '#4CAF50' : '#2196F3'
+                        }
+                      ]} 
+                    />
+                  </View>
+                  <Text style={styles.progressPercentage}>
+                    {`${feedingData.todayProgress?.percentage || 0}%`}
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.cardSubtitle}>
+                {feedingData.noSchedules ? 'Ve a "Configurar Horarios"' : 'Porciones completadas hoy'}
               </Text>
-              <Text style={styles.cardSubtitle}>Porciones completadas</Text>
+            </View>
+
+            {/* Card: Nivel de Alimento */}
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Ionicons 
+                  name="restaurant" 
+                  size={20} 
+                  color={formatPercentageWithColor(dispenserData.foodLevel).color} 
+                />
+                <Text style={styles.cardTitle}>Nivel de Alimento</Text>
+              </View>
+              {dispenserData.loading ? (
+                <Text style={styles.cardValue}>Conectando...</Text>
+              ) : (
+                <View style={styles.cardProgressContainer}>
+                  <Text 
+                    style={[
+                      styles.cardValue, 
+                      { color: formatPercentageWithColor(dispenserData.foodLevel).color }
+                    ]}
+                  >
+                    {formatPercentageWithColor(dispenserData.foodLevel).text}
+                  </Text>
+                  <View style={styles.progressBarContainer}>
+                    <View 
+                      style={[
+                        styles.progressBar, 
+                        { 
+                          width: `${dispenserData.foodLevel}%`,
+                          backgroundColor: formatPercentageWithColor(dispenserData.foodLevel).color
+                        }
+                      ]} 
+                    />
+                  </View>
+                  {dispenserData.isOnline && (
+                    <View style={styles.onlineIndicator}>
+                      <View style={styles.onlineDot} />
+                      <Text style={styles.onlineText}>En línea</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              <Text style={styles.cardSubtitle}>
+                {currentPet?.dispenserId 
+                  ? (dispenserData.isOnline ? 'Dispensador activo' : 'Dispensador offline')
+                  : 'Sin dispensador'
+                }
+              </Text>
             </View>
           </View>
 
@@ -547,7 +681,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-
+  cardProgressContainer: {
+    alignItems: 'center',
+    marginVertical: 5,
+  },
+  progressBarContainer: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    marginVertical: 8,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressPercentage: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  onlineIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 5,
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4CAF50',
+    marginRight: 5,
+  },
+  onlineText: {
+    fontSize: 12,
+    color: '#4CAF50',
+    fontWeight: '500',
+  },
+  
   // Botón dispensar
   dispenseContainer: {
     alignItems: 'center',

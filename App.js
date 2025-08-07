@@ -16,10 +16,8 @@ function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {currentUser ? (
-          // Usuario autenticado - mostrar la aplicación principal
           <Stack.Screen name="Main" component={MainNavigator} />
         ) : (
-          // Usuario no autenticado - mostrar pantallas de autenticación
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
