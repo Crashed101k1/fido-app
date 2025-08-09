@@ -13,9 +13,17 @@ export default function NotificationBell({ navigation }) {
   const toggleDropdown = () => {
     setDropdownVisible((prev) => {
       if (!prev) {
-        Animated.timing(dropdownAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+        Animated.timing(dropdownAnim, { 
+          toValue: 1, 
+          duration: 200, 
+          useNativeDriver: Platform.OS !== 'web' 
+        }).start();
       } else {
-        Animated.timing(dropdownAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start();
+        Animated.timing(dropdownAnim, { 
+          toValue: 0, 
+          duration: 150, 
+          useNativeDriver: Platform.OS !== 'web' 
+        }).start();
       }
       return !prev;
     });

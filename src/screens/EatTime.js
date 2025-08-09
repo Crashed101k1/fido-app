@@ -556,38 +556,70 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
   const currentPet = pets[selectedPetIndex];
   // Sincronizar mascotas del usuario
   useEffect(() => {
-    if (!currentUser) return;
-    const petsRef = collection(db, 'pets');
-    const q = query(petsRef, where('userId', '==', currentUser.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      setPets(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsub();
+    if (!currentUser) {
+      console.log('Usuario no autenticado, omitiendo sincronización de mascotas');
+      return;
+    }
+    
+    try {
+      const petsRef = collection(db, 'pets');
+      const q = query(petsRef, where('userId', '==', currentUser.uid));
+      const unsub = onSnapshot(q, (snap) => {
+        setPets(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }, (error) => {
+        console.log('Error en snapshot de mascotas:', error.message);
+        // No mostrar error al usuario si no está autenticado
+        if (error.code !== 'permission-denied') {
+          console.error('Error de Firestore:', error);
+        }
+      });
+      return () => unsub();
+    } catch (error) {
+      console.log('Error configurando listener de mascotas:', error.message);
+    }
   }, [currentUser]);
 
   // Sincronizar subcolecciones de la mascota seleccionada
   useEffect(() => {
-    if (!currentPet) {
+    if (!currentPet || !currentUser) {
       setFeedingTimes([]);
       setPortions([]);
       setLocalFeedingTimes([]);
       setLocalPortions([]);
       return;
     }
-    const feedingRef = collection(db, 'pets', currentPet.id, 'feedingTimes');
-    const portionsRef = collection(db, 'pets', currentPet.id, 'portions');
-    const unsub1 = onSnapshot(query(feedingRef, orderBy('timeOrder', 'asc')), (snap) => {
-      let times = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setFeedingTimes(times);
-      setLocalFeedingTimes(times);
-    });
-    const unsub2 = onSnapshot(portionsRef, (snap) => {
-      const pors = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setPortions(pors);
-      setLocalPortions(pors);
-    });
-    return () => { unsub1(); unsub2(); };
-  }, [currentPet]);
+    
+    try {
+      const feedingRef = collection(db, 'pets', currentPet.id, 'feedingTimes');
+      const portionsRef = collection(db, 'pets', currentPet.id, 'portions');
+      
+      const unsub1 = onSnapshot(query(feedingRef, orderBy('timeOrder', 'asc')), (snap) => {
+        let times = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setFeedingTimes(times);
+        setLocalFeedingTimes(times);
+      }, (error) => {
+        console.log('Error en snapshot de horarios:', error.message);
+        if (error.code !== 'permission-denied') {
+          console.error('Error de Firestore en horarios:', error);
+        }
+      });
+      
+      const unsub2 = onSnapshot(portionsRef, (snap) => {
+        const pors = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setPortions(pors);
+        setLocalPortions(pors);
+      }, (error) => {
+        console.log('Error en snapshot de porciones:', error.message);
+        if (error.code !== 'permission-denied') {
+          console.error('Error de Firestore en porciones:', error);
+        }
+      });
+      
+      return () => { unsub1(); unsub2(); };
+    } catch (error) {
+      console.log('Error configurando listeners de subcolecciones:', error.message);
+    }
+  }, [currentPet, currentUser]);
 
 
   // CRUD LOCAL

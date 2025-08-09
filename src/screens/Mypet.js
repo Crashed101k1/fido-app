@@ -27,6 +27,7 @@
 import React, { useState, useEffect } from "react";
 import { useNotifications } from '../context/NotificationContext';
 import { usePets } from '../hooks/usePets';
+import { useDispenserDiscovery } from '../hooks/useDispenserDiscovery';
 import { getPetIconInfo } from '../utils/petIcons';
 import {
   View,
@@ -40,6 +41,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
+import Toast from 'react-native-toast-message';
 
 // Obtener dimensiones de la pantalla para diseño responsivo
 const { width, height } = Dimensions.get("window");
@@ -54,13 +56,30 @@ const { width, height } = Dimensions.get("window");
 export default function MyPetScreen({ navigation }) {
   const { addNotification, removeNotification } = useNotifications();
   const { pets, addPet, updatePet, deletePet } = usePets();
+  
+  // Hook para descubrimiento y control de dispensadores
+  const {
+    discoveredDispensers,
+    isScanning,
+    mqttConnected,
+    connectionStatus,
+    connectToDispenser,
+    sendDispenseCommand,
+    syncSchedulesToDispenser,
+    rescanDevices,
+    isDeviceConnected,
+    disconnectFromDispenser
+  } = useDispenserDiscovery();
+  
   const [selectedPetIndex, setSelectedPetIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [showAddPetModal, setShowAddPetModal] = useState(false);
   const [showDispensersModal, setShowDispensersModal] = useState(false);
   const [showDispenserConfigModal, setShowDispenserConfigModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [selectedDispenser, setSelectedDispenser] = useState(null);
   const [dispenserConfigName, setDispenserConfigName] = useState('');
+  const [dispenserPassword, setDispenserPassword] = useState('FIDO2025');
   const [newPet, setNewPet] = useState({
     name: "",
     species: "Perro",
@@ -73,11 +92,7 @@ export default function MyPetScreen({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState('success'); // 'success' | 'error' | 'confirm'
   const [modalMessage, setModalMessage] = useState('');
-  const availableDispensers = [
-    { id: "DISP-001", name: "Dispensador Cocina", status: "Conectado" },
-    { id: "DISP-002", name: "Dispensador Jardín", status: "Conectado" },
-    { id: "DISP-003", name: "Dispensador Sala", status: "Desconectado" },
-  ];
+  
   const currentPet = pets[selectedPetIndex] || null;
 
   // Efectos
@@ -179,7 +194,92 @@ export default function MyPetScreen({ navigation }) {
     setModalMessage(`¿Estás seguro de que deseas eliminar a ${currentPet.name}?`);
     setModalVisible(true);
   };
-  const assignDispenser = (_, __) => setShowDispensersModal(false);
+  /**
+   * Asignar dispensador a mascota
+   */
+  const assignDispenser = async (dispenserId, dispenserName) => {
+    try {
+      if (currentPet) {
+        // Actualizar mascota con nuevo dispensador
+        const updatedPet = {
+          ...currentPet,
+          dispenserId: dispenserId,
+          dispenserName: dispenserName || "Sin asignar"
+        };
+        
+        await updatePet(currentPet.id, updatedPet);
+        setEditingPet(updatedPet);
+        
+        setShowDispensersModal(false);
+        
+        showSimpleModal('success', 
+          dispenserId 
+            ? `Dispensador ${dispenserName} asignado a ${currentPet.name}` 
+            : `Dispensador desasignado de ${currentPet.name}`
+        );
+      }
+    } catch (error) {
+      showSimpleModal('error', `Error asignando dispensador: ${error.message}`);
+    }
+  };
+
+  /**
+   * Conectar a dispensador con contraseña
+   */
+  const handleConnectToDispenser = async () => {
+    if (!selectedDispenser) return;
+    
+    try {
+      setShowPasswordModal(false);
+      
+      // Mostrar estado de conexión
+      showSimpleModal('info', `Conectando a ${selectedDispenser.name || selectedDispenser.deviceId}...`);
+      
+      // Conectar al dispensador
+      const result = await connectToDispenser(selectedDispenser.deviceId, dispenserPassword);
+      
+      if (result.success) {
+        // Asignar el dispensador a la mascota actual
+        await assignDispenser(selectedDispenser.deviceId, selectedDispenser.name || selectedDispenser.deviceId);
+        
+        showSimpleModal('success', 
+          `Dispensador conectado y asignado a ${currentPet.name}`
+        );
+      } else {
+        showSimpleModal('error', `Error conectando: ${result.message}`);
+      }
+    } catch (error) {
+      showSimpleModal('error', `Error conectando: ${error.message}`);
+    }
+    
+    setSelectedDispenser(null);
+    setDispenserPassword('FIDO2025'); // Reset password
+  };
+
+  /**
+   * Manejar dispensación remota
+   */
+  const handleDispenseFromApp = async (dispenserId, amount = 150) => {
+    try {
+      if (!isDeviceConnected(dispenserId)) {
+        showSimpleModal('error', 'Dispensador no conectado');
+        return;
+      }
+
+      showSimpleModal('info', 'Enviando comando de dispensación...');
+      
+      const result = await sendDispenseCommand(dispenserId, amount);
+      
+      if (result.success) {
+        showSimpleModal('success', 'Dispensación iniciada remotamente');
+      } else {
+        showSimpleModal('error', `Error: ${result.message}`);
+      }
+    } catch (error) {
+      showSimpleModal('error', `Error enviando comando: ${error.message}`);
+    }
+  };
+
   const openDispenserConfig = (dispenser) => {
     setSelectedDispenser(dispenser);
     setDispenserConfigName(dispenser.name);
@@ -555,8 +655,55 @@ export default function MyPetScreen({ navigation }) {
       <Modal visible={showDispensersModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Seleccionar Dispensador</Text>
+            <Text style={styles.modalTitle}>Dispensadores Disponibles</Text>
             
+            {/* Estado de conexión MQTT */}
+            <View style={styles.mqttStatusContainer}>
+              <View style={styles.mqttStatusIndicator}>
+                <View style={[
+                  styles.mqttStatusDot,
+                  { backgroundColor: mqttConnected ? '#4CAF50' : '#FF5252' }
+                ]} />
+                <Text style={styles.mqttStatusText}>
+                  {mqttConnected ? 'Conectado a MQTT' : 'Desconectado de MQTT'}
+                </Text>
+              </View>
+              
+              <TouchableOpacity
+                style={[styles.rescanButton, { opacity: isScanning ? 0.6 : 1 }]}
+                onPress={rescanDevices}
+                disabled={isScanning}
+              >
+                <Ionicons 
+                  name={isScanning ? "sync" : "refresh"} 
+                  size={16} 
+                  color="#4CAF50" 
+                  style={isScanning ? { transform: [{ rotate: '360deg' }] } : {}}
+                />
+                <Text style={styles.rescanButtonText}>
+                  {isScanning ? 'Buscando...' : 'Buscar Dispositivos'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Estado de conexión detallado */}
+            {connectionStatus && (
+              <View style={styles.connectionStatusContainer}>
+                <Ionicons 
+                  name="information-circle" 
+                  size={16} 
+                  color={mqttConnected ? '#4CAF50' : '#FF9800'} 
+                />
+                <Text style={[
+                  styles.connectionStatusText,
+                  { color: mqttConnected ? '#4CAF50' : '#FF9800' }
+                ]}>
+                  {connectionStatus}
+                </Text>
+              </View>
+            )}
+            
+            {/* Opción para sin asignar */}
             <TouchableOpacity
               style={styles.dispenserOption}
               onPress={() => assignDispenser(null, "Sin asignar")}
@@ -565,57 +712,198 @@ export default function MyPetScreen({ navigation }) {
               <Text style={styles.dispenserOptionText}>Sin asignar</Text>
             </TouchableOpacity>
 
-            {availableDispensers.map((dispenser) => (
-              <View key={dispenser.id} style={styles.dispenserOptionContainer}>
-                <TouchableOpacity
-                  style={[
-                    styles.dispenserOption,
-                    dispenser.status === "Desconectado" && styles.dispenserDisabled
-                  ]}
-                  onPress={() => {
-                    if (dispenser.status === "Conectado") {
-                      assignDispenser(dispenser.id, dispenser.name);
-                    }
-                  }}
-                  disabled={dispenser.status === "Desconectado"}
-                >
-                  <Ionicons 
-                    name="hardware-chip" 
-                    size={24} 
-                    color={dispenser.status === "Conectado" ? "#4CAF50" : "#999"} 
-                  />
-                  <View style={styles.dispenserOptionInfo}>
-                    <Text style={[
-                      styles.dispenserOptionText,
-                      dispenser.status === "Desconectado" && styles.dispenserDisabledText
-                    ]}>
-                      {dispenser.name}
-                    </Text>
-                    <Text style={[
-                      styles.dispenserStatus,
-                      dispenser.status === "Conectado" ? styles.statusConnected : styles.statusDisconnected
-                    ]}>
-                      {dispenser.status}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-                {dispenser.status === "Conectado" && (
-                  <TouchableOpacity
-                    style={styles.configDispenserButton}
-                    onPress={() => openDispenserConfig(dispenser)}
-                  >
-                    <Ionicons name="settings" size={16} color="#4CAF50" />
-                  </TouchableOpacity>
-                )}
+            {/* Lista de dispensadores descubiertos */}
+            {!mqttConnected ? (
+              <View style={styles.noDispensersContainer}>
+                <Ionicons name="wifi" size={48} color="#CCC" />
+                <Text style={styles.noDispensersText}>
+                  Sin conexión MQTT
+                </Text>
+                <Text style={styles.noDispensersSubtext}>
+                  Verifica tu conexión a internet y reinicia la app
+                </Text>
               </View>
-            ))}
+            ) : discoveredDispensers.length === 0 && !isScanning ? (
+              <View style={styles.noDispensersContainer}>
+                <Ionicons name="search" size={48} color="#CCC" />
+                <Text style={styles.noDispensersText}>
+                  No se encontraron dispensadores
+                </Text>
+                <Text style={styles.noDispensersSubtext}>
+                  Asegúrate de que tu dispensador esté encendido y conectado
+                </Text>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={rescanDevices}
+                >
+                  <Ionicons name="refresh" size={16} color="#2196F3" />
+                  <Text style={styles.retryButtonText}>Buscar de nuevo</Text>
+                </TouchableOpacity>
+              </View>
+            ) : isScanning ? (
+              <View style={styles.scanningContainer}>
+                <Ionicons name="sync" size={32} color="#4CAF50" />
+                <Text style={styles.scanningText}>Buscando dispensadores...</Text>
+                <Text style={styles.scanningSubtext}>
+                  Esto puede tomar unos segundos
+                </Text>
+              </View>
+            ) : (
+              discoveredDispensers.map((dispenser) => (
+                <View key={dispenser.deviceId} style={styles.dispenserOptionContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.dispenserOption,
+                      !dispenser.isAvailable && styles.dispenserDisabled
+                    ]}
+                    onPress={() => {
+                      if (dispenser.isAvailable) {
+                        if (isDeviceConnected(dispenser.deviceId)) {
+                          assignDispenser(dispenser.deviceId, dispenser.name || dispenser.deviceId);
+                        } else {
+                          // Mostrar modal de contraseña
+                          setSelectedDispenser(dispenser);
+                          setShowPasswordModal(true);
+                        }
+                      }
+                    }}
+                    disabled={!dispenser.isAvailable}
+                  >
+                    <View style={styles.dispenserMainInfo}>
+                      <Ionicons 
+                        name="hardware-chip" 
+                        size={24} 
+                        color={dispenser.isAvailable ? "#4CAF50" : "#999"} 
+                      />
+                      <View style={styles.dispenserInfo}>
+                        <Text style={[
+                          styles.dispenserName,
+                          !dispenser.isAvailable && styles.dispenserDisabledText
+                        ]}>
+                          {dispenser.name || dispenser.deviceId}
+                        </Text>
+                        <Text style={styles.dispenserDetails}>
+                          ID: {dispenser.deviceId}
+                        </Text>
+                        <View style={styles.dispenserStatus}>
+                          <View style={styles.statusBadge}>
+                            <Text style={styles.statusText}>
+                              {isDeviceConnected(dispenser.deviceId) ? 'Conectado' : 
+                               dispenser.isAvailable ? 'Disponible' : 'No disponible'}
+                            </Text>
+                          </View>
+                          {dispenser.batteryLevel && (
+                            <View style={styles.batteryInfo}>
+                              <Ionicons name="battery-half" size={14} color="#666" />
+                              <Text style={styles.batteryText}>{dispenser.batteryLevel}%</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                    
+                    {/* Botones de acción */}
+                    <View style={styles.dispenserActions}>
+                      {isDeviceConnected(dispenser.deviceId) && (
+                        <>
+                          <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => handleDispenseFromApp(dispenser.deviceId, 150)}
+                          >
+                            <Ionicons name="play" size={16} color="#4CAF50" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => openDispenserConfig(dispenser)}
+                          >
+                            <Ionicons name="settings" size={16} color="#666" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => disconnectFromDispenser(dispenser.deviceId)}
+                          >
+                            <Ionicons name="unlink" size={16} color="#FF5252" />
+                          </TouchableOpacity>
+                        </>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
 
             <TouchableOpacity
               style={styles.modalCancelButton}
               onPress={() => setShowDispensersModal(false)}
             >
-              <Text style={styles.modalCancelText}>Cancelar</Text>
+              <Text style={styles.modalCancelText}>Cerrar</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de Contraseña para Conexión */}
+      <Modal visible={showPasswordModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Conectar Dispensador</Text>
+            
+            {selectedDispenser && (
+              <View style={styles.dispenserInfoCard}>
+                <Ionicons name="hardware-chip" size={32} color="#4CAF50" />
+                <View style={styles.dispenserInfoDetails}>
+                  <Text style={styles.dispenserInfoTitle}>
+                    {selectedDispenser.name || selectedDispenser.deviceId}
+                  </Text>
+                  <Text style={styles.dispenserInfoSubtitle}>
+                    ID: {selectedDispenser.deviceId}
+                  </Text>
+                  {selectedDispenser.batteryLevel && (
+                    <View style={styles.batteryInfoCard}>
+                      <Ionicons name="battery-half" size={16} color="#666" />
+                      <Text style={styles.batteryInfoText}>
+                        Batería: {selectedDispenser.batteryLevel}%
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+            
+            <View style={styles.passwordInputContainer}>
+              <Text style={styles.passwordLabel}>Contraseña del Dispositivo:</Text>
+              <TextInput
+                style={styles.passwordInput}
+                value={dispenserPassword}
+                onChangeText={setDispenserPassword}
+                placeholder="Ingresa la contraseña"
+                secureTextEntry={true}
+                autoCapitalize="none"
+              />
+              <Text style={styles.passwordHint}>
+                💡 Contraseña por defecto: FIDO2025
+              </Text>
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => {
+                  setShowPasswordModal(false);
+                  setSelectedDispenser(null);
+                  setDispenserPassword('FIDO2025');
+                }}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSaveButton, { opacity: !dispenserPassword.trim() ? 0.5 : 1 }]}
+                onPress={handleConnectToDispenser}
+                disabled={!dispenserPassword.trim()}
+              >
+                <Text style={styles.modalSaveText}>Conectar</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1140,5 +1428,314 @@ const styles = StyleSheet.create({
     color: "#FF5252",
     fontSize: 12,
     fontWeight: "600",
+  },
+
+  // Estilos MQTT y conexión
+  mqttStatusContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  mqttStatusIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  mqttStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  mqttStatusText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  rescanButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#E8F5E8",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+  },
+  rescanButtonText: {
+    fontSize: 12,
+    color: "#4CAF50",
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  connectionStatus: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 12,
+    fontStyle: "italic",
+  },
+  noDispensersContainer: {
+    alignItems: "center",
+    padding: 24,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  noDispensersText: {
+    fontSize: 16,
+    color: "#666",
+    marginVertical: 12,
+    textAlign: "center",
+  },
+  dispenserDetailsText: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 2,
+  },
+
+  // Modal de contraseña
+  dispenserInfoContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  dispenserInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  dispenserInfoTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  dispenserInfoDetails: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 2,
+  },
+  passwordInputContainer: {
+    marginBottom: 24,
+  },
+  passwordLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  passwordInput: {
+    borderWidth: 1,
+    borderColor: "#DDD",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: "#FFF",
+  },
+  passwordHint: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 4,
+    fontStyle: "italic",
+  },
+
+  // Estilos para estado MQTT y dispensadores
+  mqttStatusContainer: {
+    marginBottom: 16,
+  },
+  mqttStatusIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  mqttStatusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  mqttStatusText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#333",
+  },
+  rescanButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 8,
+    backgroundColor: "#F0F8F0",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+  },
+  rescanButtonText: {
+    fontSize: 14,
+    color: "#4CAF50",
+    marginLeft: 4,
+    fontWeight: "500",
+  },
+  connectionStatusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#FFF3E0",
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  connectionStatusText: {
+    fontSize: 13,
+    marginLeft: 8,
+    flex: 1,
+  },
+  dispenserOptionContainer: {
+    marginBottom: 8,
+  },
+  dispenserMainInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  dispenserInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  dispenserName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  dispenserDetails: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  dispenserStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  statusBadge: {
+    backgroundColor: "#E8F5E8",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 11,
+    color: "#4CAF50",
+    fontWeight: "500",
+  },
+  batteryInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  batteryText: {
+    fontSize: 11,
+    color: "#666",
+    marginLeft: 2,
+  },
+  dispenserActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  actionButton: {
+    padding: 8,
+    marginLeft: 4,
+    borderRadius: 6,
+    backgroundColor: "#F5F5F5",
+  },
+  dispenserDisabled: {
+    opacity: 0.5,
+  },
+  dispenserDisabledText: {
+    color: "#999",
+  },
+  noDispensersContainer: {
+    alignItems: "center",
+    paddingVertical: 32,
+  },
+  noDispensersText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#666",
+    marginTop: 12,
+    textAlign: "center",
+  },
+  noDispensersSubtext: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 4,
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#E3F2FD",
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    color: "#2196F3",
+    marginLeft: 4,
+    fontWeight: "500",
+  },
+  scanningContainer: {
+    alignItems: "center",
+    paddingVertical: 32,
+  },
+  scanningText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#4CAF50",
+    marginTop: 12,
+  },
+  scanningSubtext: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 4,
+    textAlign: "center",
+  },
+  dispenserInfoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  dispenserInfoDetails: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  dispenserInfoTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  dispenserInfoSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 2,
+  },
+  batteryInfoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  batteryInfoText: {
+    fontSize: 12,
+    color: "#666",
+    marginLeft: 4,
   },
 });

@@ -87,12 +87,27 @@ export function AuthProvider({ children }) {
    * @returns {Promise} Promesa que resuelve con los datos del usuario
    */
   async function getUserDocument(uid) {
-    const userRef = doc(db, 'users', uid);
-    const userSnap = await getDoc(userRef);
-    
-    if (userSnap.exists()) {
-      return userSnap.data();
-    } else {
+    try {
+      if (!uid) {
+        console.log('AuthContext: UID no proporcionado');
+        return null;
+      }
+      
+      const userRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists()) {
+        return userSnap.data();
+      } else {
+        console.log('AuthContext: Documento de usuario no existe');
+        return null;
+      }
+    } catch (error) {
+      console.log('AuthContext: Error obteniendo documento usuario:', error.message);
+      // No mostrar error al usuario si es por permisos
+      if (error.code === 'permission-denied') {
+        console.log('AuthContext: Permisos insuficientes, usuario no autenticado');
+      }
       return null;
     }
   }
