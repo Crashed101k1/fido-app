@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { collection, query, where, onSnapshot, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
+import { DispenserDiscoveryContext } from '../context/DispenserDiscoveryContext';
 
 /**
  * Hook personalizado para obtener datos de alimentación en tiempo real
@@ -244,7 +245,7 @@ function calculateNextFeed(feedingTimes) {
 }
 
 /**
- * Hook para datos del dispensador (simulado)
+ * Hook para datos del dispensador en tiempo real
  * @param {string} dispenserId - ID del dispensador
  * @returns {Object} Datos del dispensador
  */
@@ -256,6 +257,9 @@ export function useDispenserData(dispenserId) {
     lastSync: null,
     loading: true
   });
+
+  // Usar el contexto real de React para obtener datos de dispensadores
+  const { discoveredDispensers } = useContext(DispenserDiscoveryContext);
 
   useEffect(() => {
     if (!dispenserId) {
@@ -269,32 +273,40 @@ export function useDispenserData(dispenserId) {
       return;
     }
 
-    // Simular datos iniciales realistas
-    const initialFoodLevel = 60 + Math.floor(Math.random() * 30); // Entre 60-90%
-    const initialBatteryLevel = 85 + Math.floor(Math.random() * 15); // Entre 85-100%
+    // Buscar el dispensador en los dispositivos descubiertos
+    const dispenser = discoveredDispensers.find(d => d.deviceId === dispenserId);
+    
+    console.log('[useDispenserData] ===== DEBUG DETALLADO =====');
+    console.log('[useDispenserData] Buscando dispensador:', dispenserId);
+    console.log('[useDispenserData] Total dispensadores disponibles:', discoveredDispensers.length);
+    console.log('[useDispenserData] Lista de dispensadores:', discoveredDispensers.map(d => ({
+      deviceId: d.deviceId,
+      containerLevel: d.containerLevel,
+      isAvailable: d.isAvailable,
+      lastSeen: d.lastSeen
+    })));
+    console.log('[useDispenserData] Dispensador encontrado:', dispenser);
+    console.log('[useDispenserData] =============================');
 
-    // Establecer datos iniciales inmediatamente
-    setDispenserData({
-      foodLevel: initialFoodLevel,
-      batteryLevel: initialBatteryLevel,
-      isOnline: true,
-      lastSync: new Date(),
-      loading: false
-    });
-
-    // Simular actualizaciones periódicas del dispensador
-    const interval = setInterval(() => {
+    if (dispenser) {
+      const newData = {
+        foodLevel: dispenser.containerLevel !== undefined ? dispenser.containerLevel : 0,
+        batteryLevel: dispenser.batteryLevel !== undefined ? dispenser.batteryLevel : 100,
+        isOnline: dispenser.isAvailable !== undefined ? dispenser.isAvailable : false,
+        lastSync: dispenser.lastSeen ? new Date(dispenser.lastSeen) : null,
+        loading: false
+      };
+      
+      console.log('[useDispenserData] Datos actualizados:', newData);
+      setDispenserData(newData);
+    } else {
       setDispenserData(prev => ({
         ...prev,
-        foodLevel: Math.max(0, prev.foodLevel - Math.random() * 0.5), // Disminuir gradualmente pero más lento
-        batteryLevel: Math.max(80, prev.batteryLevel - Math.random() * 0.05), // Disminuir muy lentamente
-        isOnline: Math.random() > 0.02, // 98% probabilidad de estar online
-        lastSync: new Date()
+        isOnline: false,
+        loading: false
       }));
-    }, 5000); // Actualizar cada 5 segundos para mejor tiempo real
-
-    return () => clearInterval(interval);
-  }, [dispenserId]);
+    }
+  }, [dispenserId, discoveredDispensers]);
 
   return dispenserData;
 }

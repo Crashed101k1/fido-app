@@ -152,6 +152,7 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { where } from 'firebase/firestore';
+import { useDispenserDiscovery } from '../hooks/useDispenserDiscovery';
 
 // --- ESTILOS ANTES DE LA FUNCIÓN PRINCIPAL ---
 const modalStyles = StyleSheet.create({
@@ -505,6 +506,7 @@ import { useFocusEffect } from '@react-navigation/native';
 
 const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
   const { currentUser } = useAuth();
+  const { mqttConnected, syncSchedulesToDispenser, sendDispenseCommand } = useDispenserDiscovery();
   const [pets, setPets] = useState([]);
   // Permitir selección inicial y sincronización de mascota vía parámetro (índice o ID)
   const [selectedPetIndex, setSelectedPetIndex] = useState(() => {
@@ -789,6 +791,79 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
     }));
   };
 
+  // Función para sincronizar horarios con el dispensador
+  const syncWithDispenser = async () => {
+    if (!currentPet || !currentPet.dispenserId) {
+      setModalType('error');
+      setModalTitle('Sin Dispensador');
+      setModalMessage(`${currentPet?.name || 'Esta mascota'} no tiene un dispensador asignado.`);
+      setModalActions([
+        { text: 'OK', onPress: () => setModalVisible(false), style: 'default' }
+      ]);
+      setModalVisible(true);
+      return;
+    }
+
+    try {
+      // Obtener horarios habilitados y porción seleccionada
+      const enabledTimes = localFeedingTimes.filter(t => t.enabled);
+      const selectedPortion = localPortions.find(p => p.selected);
+      if (enabledTimes.length === 0) {
+        setModalType('error');
+        setModalTitle('Sin Horarios');
+        setModalMessage('No hay horarios habilitados para sincronizar.');
+        setModalActions([
+          { text: 'OK', onPress: () => setModalVisible(false), style: 'default' }
+        ]);
+        setModalVisible(true);
+        return;
+      }
+      if (!selectedPortion) {
+        setModalType('error');
+        setModalTitle('Sin Porción');
+        setModalMessage('No hay una porción seleccionada.');
+        setModalActions([
+          { text: 'OK', onPress: () => setModalVisible(false), style: 'default' }
+        ]);
+        setModalVisible(true);
+        return;
+      }
+      // Convertir horarios al formato del ESP32
+      const schedulesToSync = enabledTimes.map(time => {
+        let hour = parseInt(time.hour);
+        const minute = parseInt(time.minutes || '0');
+        if (time.period === 'pm' && hour !== 12) hour += 12;
+        if (time.period === 'am' && hour === 12) hour = 0;
+        return {
+          hour: hour,
+          minute: minute,
+          portion: parseFloat(selectedPortion.amount),
+          active: true
+        };
+      });
+      console.log('[SYNC] Intentando sincronizar horarios:', schedulesToSync);
+      // Enviar al dispensador
+      await syncSchedulesToDispenser(currentPet.dispenserId, schedulesToSync);
+      console.log('[SYNC] Sincronización exitosa con el dispensador:', currentPet.dispenserId);
+      setModalType('info');
+      setModalTitle('Sincronización Exitosa');
+      setModalMessage(`Los horarios de ${currentPet.name} han sido sincronizados con el dispensador.`);
+      setModalActions([
+        { text: 'OK', onPress: () => setModalVisible(false), style: 'default' }
+      ]);
+      setModalVisible(true);
+    } catch (error) {
+      console.error('[SYNC] Error en la sincronización:', error);
+      setModalType('error');
+      setModalTitle('Error de Sincronización');
+      setModalMessage(`Error: ${error.message}`);
+      setModalActions([
+        { text: 'OK', onPress: () => setModalVisible(false), style: 'default' }
+      ]);
+      setModalVisible(true);
+    }
+  };
+
   // Función para detectar cambios no guardados
   const hasUnsavedChanges = () => {
     // Función para comparar arrays de horarios
@@ -907,8 +982,47 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
     }, [navigation, hasUnsavedChanges, localFeedingTimes, localPortions, feedingTimes, portions])
   );
 
+  const [lastDispensed, setLastDispensed] = useState(null);
+  const [dispensedToday, setDispensedToday] = useState({});
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!currentPet || !currentPet.dispenserId) return;
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const day = now.getDate();
+      const hour = now.getHours();
+      const minute = now.getMinutes();
+      const todayKey = `${year}-${month}-${day}`;
+      // Buscar horario habilitado que coincida con la hora actual
+      const enabledTimes = localFeedingTimes.filter(t => t.enabled);
+      const selectedPortion = localPortions.find(p => p.selected);
+      if (!selectedPortion) return;
+      enabledTimes.forEach(time => {
+        let horario24 = parseInt(time.hour);
+        if (time.period === 'pm' && horario24 !== 12) horario24 += 12;
+        if (time.period === 'am' && horario24 === 12) horario24 = 0;
+        const minutos = parseInt(time.minutes || '0');
+        const horarioId = `${todayKey}_${horario24}:${minutos}`;
+        // Validar si ya se dispensó este horario hoy
+        if (hour === horario24 && minute === minutos && !dispensedToday[horarioId]) {
+          sendDispenseCommand(currentPet.dispenserId, parseFloat(selectedPortion.amount))
+            .then(() => {
+              setDispensedToday(prev => ({ ...prev, [horarioId]: true }));
+              console.log(`[DISPENSE] Alimento dispensado para horario ${horarioId}`);
+            })
+            .catch(err => {
+              console.error('[DISPENSE] Error:', err.message);
+            });
+        }
+      });
+    }, 60000); // cada minuto
+    return () => clearInterval(interval);
+  }, [localFeedingTimes, localPortions, currentPet, dispensedToday]);
+
   return (
-    <View style={styles.container}>
+  <View style={styles.container}>
       <ScrollView 
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
@@ -1070,6 +1184,15 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
           >
             <Ionicons name="save" size={20} color="#FFFFFF" style={styles.saveIcon} />
             <Text style={styles.saveButtonText}>Guardar Configuración</Text>
+          </TouchableOpacity>
+          
+          {/* Botón de sincronizar con dispensador */}
+          <TouchableOpacity 
+            style={[styles.saveButton, { backgroundColor: '#2196F3', marginTop: 10 }]}
+            onPress={syncWithDispenser}
+          >
+            <Ionicons name="sync" size={20} color="#FFFFFF" style={styles.saveIcon} />
+            <Text style={styles.saveButtonText}>Sincronizar con Dispensador</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

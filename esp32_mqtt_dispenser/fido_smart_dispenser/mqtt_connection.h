@@ -13,9 +13,9 @@
 #include <ArduinoJson.h>
 
 // ========== CONFIGURACIÓN DE CONEXIÓN ==========
-// WiFi Credentials
-const char* ssid = "Torre B402";
-const char* password = "73144984";
+// WiFi Credentials - ⚠️ CAMBIAR POR TU RED WIFI
+const char* ssid = "Megacable_2.4G_165C";     // ← Cambiar por el nombre de tu WiFi
+const char* password = "YHq6mdb4";   // ← Cambiar por tu contraseña WiFi
 
 // MQTT Broker (shiftr.io)
 const char* mqtt_server = "eridanus.cloud.shiftr.io";
@@ -126,6 +126,7 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
       if (action == "discover") {
         // Responder al discovery con información del dispositivo
         publishDiscovery();
+        publishStatus("online", "Respuesta a discovery");
         Serial.println("Respondiendo a discovery request");
       }
     }

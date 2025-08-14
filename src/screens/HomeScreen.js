@@ -25,7 +25,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNotifications } from '../context/NotificationContext';
 import { usePets } from '../hooks/usePets';
+import { getAuth } from 'firebase/auth';
 import { useFeedingData, useDispenserData } from '../hooks/useFeedingData';
+import { useContext } from 'react';
+import { DispenserDiscoveryContext } from '../context/DispenserDiscoveryContext';
 import { getPetIconInfo } from '../utils/petIcons';
 import { formatDate, formatFutureDate, formatPercentageWithColor } from '../utils/dateUtils';
 import { collection, addDoc } from 'firebase/firestore';
@@ -36,7 +39,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert
+  Alert,
+  TextInput
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -48,9 +52,134 @@ import { Ionicons } from '@expo/vector-icons';
  * @returns {JSX.Element} Componente de pantalla principal
  */
 export default function HomeScreen({ navigation }) {
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [connectPassword, setConnectPassword] = useState('');
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState('');
+  // Contexto global para funciones del dispensador
+  const {
+    sendDispenseCommand,
+    isDeviceConnected,
+    mqttConnected,
+    connectToDispenser,
+    disconnectFromDispenser
+  } = useContext(DispenserDiscoveryContext);
   const { addNotification, removeNotification } = useNotifications();
   const { pets, loading } = usePets();
   const [selectedPet, setSelectedPet] = useState(0);
+
+  // Calcular mascota actual y hooks de datos
+  const currentPet = pets && pets.length > 0 ? pets[selectedPet] : null;
+  const feedingData = useFeedingData(currentPet?.id);
+  const dispenserData = useDispenserData(currentPet?.dispenserId);
+
+  // Notificación de nivel de alimento bajo o medio
+  useEffect(() => {
+    if (!dispenserData.loading && dispenserData.isOnline) {
+      if (dispenserData.foodLevel <= 10) {
+        addNotification({
+          id: 'food-empty',
+          message: '¡El dispensador está vacío! Por favor, rellena el alimento.',
+          icon: 'alert-circle',
+          color: '#F44336',
+        });
+      } else if (dispenserData.foodLevel <= 50) {
+        addNotification({
+          id: 'food-medium',
+          message: 'El nivel de alimento es medio. Considera rellenar pronto.',
+          icon: 'alert',
+          color: '#FF9800',
+        });
+      } else {
+        removeNotification('food-empty');
+        removeNotification('food-medium');
+      }
+    }
+  }, [dispenserData.foodLevel, dispenserData.loading, dispenserData.isOnline, addNotification, removeNotification]);
+
+  // Debug log para datos del dispensador
+  useEffect(() => {
+    if (currentPet?.dispenserId) {
+      console.log('[HomeScreen] ===== DEBUG DISPENSADOR =====');
+      console.log('[HomeScreen] Mascota actual:', currentPet.name);
+      console.log('[HomeScreen] DispenserID esperado:', currentPet.dispenserId);
+      console.log('[HomeScreen] Datos del dispensador recibidos:', {
+        dispenserId: currentPet.dispenserId,
+        foodLevel: dispenserData.foodLevel,
+        isOnline: dispenserData.isOnline,
+        loading: dispenserData.loading,
+        lastSync: dispenserData.lastSync
+      });
+      console.log('[HomeScreen] ================================');
+    } else {
+      // Si se desasigna el dispensador, desconectar
+      if (dispenserData?.isOnline && dispenserData?.dispenserId) {
+        disconnectFromDispenser(dispenserData.dispenserId);
+        console.log('[HomeScreen] Dispensador desconectado por desasignación:', dispenserData.dispenserId);
+      }
+    }
+  }, [currentPet?.dispenserId, dispenserData]);
+
+  /**
+   * Registra una alimentación inmediata en Firebase
+   */
+  const addFeedingRecord = async (petId, amount = null, dispenserType = 'manual') => {
+    try {
+      const now = new Date();
+      const auth = getAuth();
+      const userId = auth.currentUser ? auth.currentUser.uid : null;
+      console.log('[FIREBASE] userId a guardar:', userId);
+      if (!userId) throw new Error('Usuario no autenticado');
+      const docData = {
+        petId: petId,
+        userId: userId,
+        timestamp: now.toISOString(),
+        type: dispenserType,
+        source: 'dispenser',
+        createdAt: now.toISOString()
+      };
+      
+      // Agregar cantidad si está disponible
+      if (amount !== null) {
+        docData.amount = parseFloat(amount);
+        docData.amountUnit = 'grams';
+      }
+      
+      console.log('[FIREBASE] Documento a guardar en feedingRecords:', docData);
+      await addDoc(collection(db, 'feedingRecords'), docData);
+      console.log('[FIREBASE] Documento guardado correctamente en feedingRecords');
+    } catch (error) {
+      console.error('[FIREBASE] Error guardando en feedingRecords:', error);
+      throw error;
+    }
+  };
+
+  // Listener para confirmaciones de dispensación desde el ESP32
+  useEffect(() => {
+    if (!currentPet?.dispenserId) return;
+    
+    const handleDispensingComplete = (data) => {
+      console.log('[DISPENSING] Confirmación recibida del ESP32:', data);
+      if (data.state === 'completed' && data.dispensedAmount > 0 && data.type) {
+        // Registrar en Firebase con la cantidad real dispensada
+        addFeedingRecord(currentPet.id, data.dispensedAmount, data.type)
+          .then(() => {
+            console.log('[FIREBASE] Registro automático completado');
+          })
+          .catch((error) => {
+            console.error('[FIREBASE] Error en registro automático:', error);
+          });
+      }
+    };
+
+    // TODO: Agregar listener real para mensajes MQTT del dispensador
+    // Esto debería conectarse al contexto MQTT para escuchar confirmaciones
+    
+    return () => {
+      // Cleanup si es necesario
+    };
+  }, [currentPet?.dispenserId, addFeedingRecord]);
+
 
   useEffect(() => {
     if (!pets) return;
@@ -103,36 +232,11 @@ export default function HomeScreen({ navigation }) {
     }
   }, [pets, addNotification, removeNotification, navigation]);
 
-  /**
-   * Registra una alimentación inmediata en Firebase
-   */
-  const addFeedingRecord = async (petId) => {
-    try {
-      const now = new Date();
-      
-      await addDoc(collection(db, 'feedingRecords'), {
-        petId: petId,
-        timestamp: now.toISOString(),
-        type: 'manual',
-        source: 'dispenser',
-        createdAt: now.toISOString()
-      });
-      
-    } catch (error) {
-      throw error;
-    }
-  };
-
   useEffect(() => {
     if (pets && pets.length > 0 && selectedPet >= pets.length) {
       setSelectedPet(0);
     }
   }, [pets, selectedPet]);
-  
-  const currentPet = pets && pets.length > 0 ? pets[selectedPet] : null;
-  
-  const feedingData = useFeedingData(currentPet?.id);
-  const dispenserData = useDispenserData(currentPet?.dispenserId);
 
   const handleDispenseNow = async () => {
     if (!currentPet?.dispenserId) {
@@ -146,31 +250,36 @@ export default function HomeScreen({ navigation }) {
       );
       return;
     }
-
-    if (!dispenserData.isOnline) {
+    if (!isDeviceConnected(currentPet.dispenserId)) {
       Alert.alert(
         'Dispensador Desconectado',
-        'El dispensador no está conectado. Verifica la conexión WiFi del dispositivo.',
+        'Conecta el dispensador antes de dispensar alimento.',
         [{ text: 'OK' }]
       );
       return;
     }
-
     try {
-      // Por ahora, solo registrar el dispensado en Firebase
-      // La integración MQTT se implementará en la siguiente fase
-      await addFeedingRecord(currentPet.id);
-
-      Alert.alert(
-        'Dispensado Registrado',
-        `Se registró el dispensado para ${currentPet.name}`,
-        [{ text: "OK" }]
-      );
-
+      console.log('[APP] Enviando comando MQTT DISPENSE a', currentPet.dispenserId, 'por 150g');
+      const auth = getAuth();
+      const userId = auth.currentUser ? auth.currentUser.uid : null;
+      const result = await sendDispenseCommand(currentPet.dispenserId, 150, currentPet.id, userId);
+      if (result.success) {
+        Alert.alert(
+          'Comando Enviado',
+          `Se envió comando de dispensación para ${currentPet.name}. El registro se completará automáticamente.`,
+          [{ text: "OK" }]
+        );
+      } else {
+        Alert.alert(
+          'Error',
+          `No se pudo dispensar: ${result.message}`,
+          [{ text: "OK" }]
+        );
+      }
     } catch (error) {
       Alert.alert(
         'Error',
-        `No se pudo registrar el dispensado: ${error.message}`,
+        `No se pudo dispensar: ${error.message}`,
         [{ text: "OK" }]
       );
     }
@@ -197,11 +306,11 @@ export default function HomeScreen({ navigation }) {
                     <Text style={styles.dispenserName}>
                       {currentPet.dispenserName || `Dispensador ${currentPet.dispenserId}`}
                     </Text>
-                    <Text style={styles.dispenserStatusText}>✓ Conectado y Activo</Text>
+                    <Text style={styles.dispenserStatusText}>Conectado</Text>
                   </View>
                 </View>
                 <View style={styles.dispenserActions}>
-                  <TouchableOpacity style={styles.configButton} onPress={() => {}}>
+                  <TouchableOpacity style={styles.configButton} onPress={() => navigation.navigate('MyPet')}>
                     <Ionicons name="settings" size={16} color="#4CAF50" />
                   </TouchableOpacity>
                 </View>
@@ -211,13 +320,13 @@ export default function HomeScreen({ navigation }) {
                 <Ionicons name="alert-circle" size={30} color="#F44336" />
                 <View style={styles.dispenserDetails}>
                   <Text style={styles.dispenserName}>Sin Dispensador</Text>
-                  <Text style={styles.dispenserStatusText}>⚠️ No hay dispositivo conectado</Text>
+                  <Text style={styles.dispenserStatusText}>No hay dispositivo conectado</Text>
                 </View>
                 <TouchableOpacity
                   style={styles.connectButton}
                   onPress={() => navigation.navigate('MyPet')}
                 >
-                  <Text style={styles.connectButtonText}>Conectar</Text>
+                  <Text style={styles.connectButtonText}>Configurar</Text>
                 </TouchableOpacity>
               </View>
             )}

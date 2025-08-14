@@ -206,17 +206,20 @@ export default function MyPetScreen({ navigation }) {
           dispenserId: dispenserId,
           dispenserName: dispenserName || "Sin asignar"
         };
-        
         await updatePet(currentPet.id, updatedPet);
         setEditingPet(updatedPet);
-        
         setShowDispensersModal(false);
-        
         showSimpleModal('success', 
           dispenserId 
             ? `Dispensador ${dispenserName} asignado a ${currentPet.name}` 
             : `Dispensador desasignado de ${currentPet.name}`
         );
+        // Forzar refresco y navegar a HomeScreen tras breve delay
+        setTimeout(() => {
+          if (typeof navigation?.navigate === 'function') {
+            navigation.navigate('Home');
+          }
+        }, 800);
       }
     } catch (error) {
       showSimpleModal('error', `Error asignando dispensador: ${error.message}`);

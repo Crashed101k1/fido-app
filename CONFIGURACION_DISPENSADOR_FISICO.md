@@ -1,53 +1,93 @@
-# 🔧 Configuración para Dispensador Físico FIDO
+# 🔧 Configuración para Dispensador Físico FIDO - DESDE TU PC
 
-## ✅ **Estado Actual del Sistema**
+## 📋 **CONFIGURACIÓN COMPLETA DESDE CERO EN TU PC**
 
-La aplicación FIDO ahora está configurada para **conexiones MQTT reales** con tu dispensador físico ESP32-S3 LOLIN. Se han eliminado todos los datos simulados.
+Como anteriormente usabas otra PC, aquí tienes la configuración completa para tu nueva máquina:
 
-## 🌐 **Configuración de Red**
+## 🔧 **PASO 1: INSTALAR ARDUINO IDE EN TU PC**
 
-### **WiFi en ESP32**
-Tu dispensador debe conectarse a la misma red WiFi que tu computadora/teléfono:
+### Descargar e Instalar:
+1. Ve a **https://www.arduino.cc/en/software**
+2. Descarga **Arduino IDE 2.x** (versión más reciente)
+3. Instala en tu PC siguiendo las instrucciones
 
+## 📦 **PASO 2: CONFIGURAR SOPORTE ESP32**
+
+### En Arduino IDE:
+1. Abrir **File > Preferences**
+2. En "Additional Board Manager URLs" agregar:
+   ```
+   https://espressif.github.io/arduino-esp32/package_esp32_index.json
+   ```
+3. Ir a **Tools > Board > Boards Manager**
+4. Buscar "ESP32" 
+5. Instalar **"ESP32 by Espressif Systems"** (versión más reciente)
+
+## 📚 **PASO 3: INSTALAR BIBLIOTECAS NECESARIAS**
+
+### En Arduino IDE ir a **Tools > Manage Libraries** y buscar e instalar:
+
+1. **ESP32Servo** por Kevin Harrington
+2. **HX711** por Bogdan Necula
+3. **LiquidCrystal I2C** por Frank de Brabander
+4. **ArduinoJson** por Benoit Blanchon
+5. **PubSubClient** por Nick O'Leary
+6. **WiFi** (ya incluida con ESP32)
+7. **Wire** (ya incluida)
+
+## 🔌 **PASO 4: CONECTAR LA PLACA A TU PC**
+
+### Conexión física:
+1. **Conectar ESP32 a tu PC** con cable USB-C (LOLIN S3)
+2. **Instalar driver** si es necesario:
+   - Windows: Puede instalar automáticamente
+   - Si no: Buscar **"CP210x USB to UART Bridge Driver"** en Google
+
+### Verificar conexión:
+1. En Arduino IDE: **Tools > Port**
+2. Seleccionar el puerto COM que aparezca (ej: COM3, COM4, etc.)
+3. En **Tools > Board** seleccionar **"ESP32S3 Dev Module"**
+
+## 📁 **PASO 5: PREPARAR EL CÓDIGO EN TU PC**
+
+### Copiar archivos del proyecto:
+1. **Crear carpeta**: `C:\Users\TuUsuario\Documents\Arduino\fido_smart_dispenser\`
+2. **Copiar estos archivos** desde tu proyecto FIDO:
+   ```
+   esp32_mqtt_dispenser/fido_smart_dispenser.ino
+   esp32_mqtt_dispenser/mqtt_connection.h
+   esp32_mqtt_dispenser/publish_with_type.h
+   ```
+
+### **IMPORTANTE - Configurar tu WiFi:**
+En `mqtt_connection.h` **DEBES cambiar** estos valores:
 ```cpp
-// En fido_smart_dispenser.ino - líneas 15-16
-const char* ssid = "TU_WIFI_SSID";        // ⚠️ Cambiar por tu red WiFi
-const char* password = "TU_WIFI_PASSWORD"; // ⚠️ Cambiar por tu contraseña
-```
+// ⚠️ CAMBIAR POR TU RED WIFI
+const char* ssid = "TU_WIFI_NOMBRE";           // Nombre de tu WiFi
+const char* password = "TU_WIFI_PASSWORD";     // Contraseña de tu WiFi
 
-### **Configuración MQTT (Ya configurada)**
-```cpp
-// Estas ya están configuradas correctamente:
-const char* mqtt_server = "eridanus.cloud.shiftr.io";
+// ✅ MQTT ya configurado (NO cambiar)
+const char* mqtt_server = "shiftr.io";
 const int mqtt_port = 1883;
-const char* mqtt_user = "eridanus";
-const char* mqtt_password = "Aeui6hvnooMPWo2j";
+const char* mqtt_user = "FIDO_2025";
+const char* mqtt_password = "FIDO2025!";
 ```
 
-## 🔌 **Configuración de Hardware**
+## ⚙️ **PASO 6: CONFIGURAR PLACA EN ARDUINO IDE**
 
-### **Pines del ESP32-S3 LOLIN (Ya configurados)**
-```cpp
-// Servo motor (dispensación)
-#define SERVO_PIN 2
-
-// Sensor de peso HX711
-#define LOADCELL_DOUT_PIN 4
-#define LOADCELL_SCK_PIN 5
-
-// Sensor ultrasónico HC-SR04
-#define TRIG_PIN 18
-#define ECHO_PIN 19
-
-// Display LCD I2C
-// SDA: GPIO 21 (por defecto)
-// SCL: GPIO 22 (por defecto)
-```
-
-## 🚀 **Pasos para Configurar tu Dispensador**
-
-### **Paso 1: Configurar Red WiFi**
-1. Abre `esp32_mqtt_dispenser/fido_smart_dispenser.ino`
+### Settings para ESP32-S3 LOLIN:
+- **Board**: "ESP32S3 Dev Module"
+- **Upload Speed**: 921600
+- **USB Mode**: "Hardware CDC and JTAG"
+- **USB CDC On Boot**: "Enabled"
+- **USB Firmware MSC On Boot**: "Disabled"
+- **USB DFU On Boot**: "Disabled"
+- **Upload Mode**: "UART0 / Hardware CDC"
+- **CPU Frequency**: 240MHz
+- **Flash Mode**: QIO
+- **Flash Size**: 16MB
+- **Partition Scheme**: "16M Flash (3MB APP/9.9MB FATFS)"
+- **Port**: El COM que detectó tu placa (ej: COM3)
 2. Busca las líneas 15-16:
    ```cpp
    const char* ssid = "TU_WIFI_SSID";        // ⚠️ CAMBIAR

@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Usuarios: cada usuario solo puede leer/escribir su propio documento
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId && resource == null;
+    }
+
+    // Mascotas y subcolecciones
+    match /pets/{petId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+
+      // Subcolección de horarios de alimentación
+      match /feedingTimes/{timeId} {
+        allow read, write, create: if request.auth != null &&
+          get(/databases/$(database)/documents/pets/$(petId)).data.userId == request.auth.uid;
+      }
+
+      // Subcolección de porciones
+      match /portions/{portionId} {
+        allow read, write, create: if request.auth != null &&
+          get(/databases/$(database)/documents/pets/$(petId)).data.userId == request.auth.uid;
+      }
+
+      // Subcolección de historial de alimentación
+      match /feedingHistory/{historyId} {
+        allow read, write, create: if request.auth != null &&
+          get(/databases/$(database)/documents/pets/$(petId)).data.userId == request.auth.uid;
+      }
+    }
+
+    // Registros de alimentación (colección raíz)
+    match /feedingRecords/{recordId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Horarios de alimentación (colección independiente)
+    match /feeding_schedules/{scheduleId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Dispensadores
+    match /dispensers/{dispenserId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Estadísticas
+    match /statistics/{statId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Mensajes de contacto: cualquiera puede crear, nadie puede leer/editar/borrar
+    match /contactMessages/{msgId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+
+    // Denegar acceso a cualquier otra colección no especificada
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
