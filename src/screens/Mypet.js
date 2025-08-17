@@ -128,6 +128,16 @@ export default function MyPetScreen({ navigation }) {
     }
   }, [pets.length, selectedPetIndex]);
 
+  // Actualiza la asignación del dispensador en tiempo real
+  useEffect(() => {
+    if (!currentPet) return;
+    const isConnected = currentPet.dispenserId && isDeviceConnected(currentPet.dispenserId);
+    if (!isConnected && currentPet.dispenserId) {
+      // Si el dispensador se desconectó, desasignar automáticamente
+      assignDispenser(null, "Sin asignar");
+    }
+  }, [discoveredDispensers, currentPet?.dispenserId, isDeviceConnected]);
+
   // Handlers
   const showSimpleModal = (type, message) => {
     setModalType(type);
@@ -709,10 +719,13 @@ export default function MyPetScreen({ navigation }) {
             {/* Opción para sin asignar */}
             <TouchableOpacity
               style={styles.dispenserOption}
-              onPress={() => assignDispenser(null, "Sin asignar")}
+              onPress={async () => {
+                await disconnectFromDispenser(currentPet?.dispenserId);
+                await assignDispenser(null, "Sin asignar");
+              }}
             >
               <Ionicons name="close-circle" size={24} color="#FF5252" />
-              <Text style={styles.dispenserOptionText}>Sin asignar</Text>
+              <Text style={styles.dispenserOptionText}>Desconectar Dispensador</Text>
             </TouchableOpacity>
 
             {/* Lista de dispensadores descubiertos */}
@@ -764,7 +777,6 @@ export default function MyPetScreen({ navigation }) {
                         if (isDeviceConnected(dispenser.deviceId)) {
                           assignDispenser(dispenser.deviceId, dispenser.name || dispenser.deviceId);
                         } else {
-                          // Mostrar modal de contraseña
                           setSelectedDispenser(dispenser);
                           setShowPasswordModal(true);
                         }
@@ -779,10 +791,7 @@ export default function MyPetScreen({ navigation }) {
                         color={dispenser.isAvailable ? "#4CAF50" : "#999"} 
                       />
                       <View style={styles.dispenserInfo}>
-                        <Text style={[
-                          styles.dispenserName,
-                          !dispenser.isAvailable && styles.dispenserDisabledText
-                        ]}>
+                        <Text style={[styles.dispenserName, !dispenser.isAvailable && styles.dispenserDisabledText]}>
                           {dispenser.name || dispenser.deviceId}
                         </Text>
                         <Text style={styles.dispenserDetails}>
@@ -791,8 +800,11 @@ export default function MyPetScreen({ navigation }) {
                         <View style={styles.dispenserStatus}>
                           <View style={styles.statusBadge}>
                             <Text style={styles.statusText}>
-                              {isDeviceConnected(dispenser.deviceId) ? 'Conectado' : 
-                               dispenser.isAvailable ? 'Disponible' : 'No disponible'}
+                              {isDeviceConnected(dispenser.deviceId)
+                                ? 'Conectado'
+                                : dispenser.isAvailable
+                                ? 'Disponible'
+                                : 'Sin asignar'}
                             </Text>
                           </View>
                           {dispenser.batteryLevel && (
@@ -804,8 +816,6 @@ export default function MyPetScreen({ navigation }) {
                         </View>
                       </View>
                     </View>
-                    
-                    {/* Botones de acción */}
                     <View style={styles.dispenserActions}>
                       {isDeviceConnected(dispenser.deviceId) && (
                         <>
@@ -823,7 +833,10 @@ export default function MyPetScreen({ navigation }) {
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={styles.actionButton}
-                            onPress={() => disconnectFromDispenser(dispenser.deviceId)}
+                            onPress={async () => {
+                              await disconnectFromDispenser(dispenser.deviceId);
+                              await assignDispenser(null, "Sin asignar");
+                            }}
                           >
                             <Ionicons name="unlink" size={16} color="#FF5252" />
                           </TouchableOpacity>

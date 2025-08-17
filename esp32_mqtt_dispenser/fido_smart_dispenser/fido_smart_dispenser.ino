@@ -72,6 +72,9 @@ bool dispensingViaApp = false;       // Flag para dispensación vía app
 const String DEVICE_PASSWORD = "FIDO2025"; // Contraseña del dispositivo
 bool isConnectedToApp = false;               // Estado de conexión con la app
 
+// --- CONTROL DE RECONEXIÓN MANUAL ---
+bool manualDisconnect = false; // Si está en true, no reconectar MQTT automáticamente
+
 /**
  * FUNCIÓN: actualizarLCD
  * Actualiza la pantalla LCD con la información del sistema
@@ -213,6 +216,14 @@ void manejarComandosMQTT(String command, JsonObject data) {
       publishResponse("connect", "error", "Contraseña requerida");
     }
     
+  } else if (command == "disconnect") {
+    // Desconexión manual desde la app
+    manualDisconnect = true;
+    mqttConnected = false;
+    isConnectedToApp = false;
+    publishResponse("disconnect", "success", "Desconexión manual realizada");
+    publishStatus("available", "Desconectado manualmente, listo para reconexión");
+    Serial.println("[MQTT] Desconexión manual activada. No se reconectará automáticamente.");
   } else if (command == "dispense" && !mostrandoResultado) {
     // Verificar autenticación antes de dispensar
     if (!isConnectedToApp) {

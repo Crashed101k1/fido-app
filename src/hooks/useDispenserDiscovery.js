@@ -89,6 +89,13 @@ export function useDispenserDiscovery() {
         if (message.status === 'connected' || message.status === 'online') {
           setConnectedDevices(prev => new Set([...prev, deviceId]));
         }
+        if (message.status === 'offline') {
+          setConnectedDevices(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(deviceId);
+            return newSet;
+          });
+        }
         setDiscoveredDispensers(prev => {
           const existing = prev.find(d => d.deviceId === deviceId);
           const updated = {

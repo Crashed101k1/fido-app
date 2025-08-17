@@ -14,8 +14,8 @@
 
 // ========== CONFIGURACIÓN DE CONEXIÓN ==========
 // WiFi Credentials - ⚠️ CAMBIAR POR TU RED WIFI
-const char* ssid = "Megacable_2.4G_165C";     // ← Cambiar por el nombre de tu WiFi
-const char* password = "YHq6mdb4";   // ← Cambiar por tu contraseña WiFi
+const char* ssid = "Megacable_2.4G_C4FA";     // ← Cambiar por el nombre de tu WiFi
+const char* password = "fnGrJbTH";   // ← Cambiar por tu contraseña WiFi
 
 // MQTT Broker (shiftr.io)
 const char* mqtt_server = "eridanus.cloud.shiftr.io";
@@ -338,8 +338,10 @@ void setCommandCallback(void (*callback)(String command, JsonObject data)) {
 /**
  * Mantiene la conexión MQTT activa
  */
+extern bool manualDisconnect; // Variable global definida en el .ino
+
 void maintainMQTTConnection() {
-  if (!client.connected() && wifiConnected) {
+  if (!client.connected() && wifiConnected && !manualDisconnect) {
     unsigned long now = millis();
     if (now - lastMQTTHeartbeat > 5000) { // Reintentar cada 5 segundos
       if (connectMQTT()) {
@@ -347,10 +349,8 @@ void maintainMQTTConnection() {
       }
     }
   }
-  
   if (mqttConnected) {
     client.loop();
-    
     // Heartbeat cada 30 segundos
     unsigned long now = millis();
     if (now - lastMQTTHeartbeat > 30000) {

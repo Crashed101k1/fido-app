@@ -296,7 +296,10 @@ export function useDispenserData(dispenserId) {
         lastSync: dispenser.lastSeen ? new Date(dispenser.lastSeen) : null,
         loading: false
       };
-      
+      // Si el dispensador tiene status offline, forzar isOnline a false
+      if (dispenser.status === 'offline' || !dispenser.isAvailable) {
+        newData.isOnline = false;
+      }
       console.log('[useDispenserData] Datos actualizados:', newData);
       setDispenserData(newData);
     } else {
