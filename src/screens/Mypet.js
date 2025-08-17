@@ -128,16 +128,6 @@ export default function MyPetScreen({ navigation }) {
     }
   }, [pets.length, selectedPetIndex]);
 
-  // Actualiza la asignación del dispensador en tiempo real
-  useEffect(() => {
-    if (!currentPet) return;
-    const isConnected = currentPet.dispenserId && isDeviceConnected(currentPet.dispenserId);
-    if (!isConnected && currentPet.dispenserId) {
-      // Si el dispensador se desconectó, desasignar automáticamente
-      assignDispenser(null, "Sin asignar");
-    }
-  }, [discoveredDispensers, currentPet?.dispenserId, isDeviceConnected]);
-
   // Handlers
   const showSimpleModal = (type, message) => {
     setModalType(type);
@@ -716,8 +706,9 @@ export default function MyPetScreen({ navigation }) {
               </View>
             )}
             
-            {/* Opción para sin asignar */}
-            <TouchableOpacity
+             {/* Opción para sin asignar */} 
+            {/*
+             <TouchableOpacity
               style={styles.dispenserOption}
               onPress={async () => {
                 await disconnectFromDispenser(currentPet?.dispenserId);
@@ -726,7 +717,8 @@ export default function MyPetScreen({ navigation }) {
             >
               <Ionicons name="close-circle" size={24} color="#FF5252" />
               <Text style={styles.dispenserOptionText}>Desconectar Dispensador</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> 
+             */}
 
             {/* Lista de dispensadores descubiertos */}
             {!mqttConnected ? (
@@ -817,7 +809,7 @@ export default function MyPetScreen({ navigation }) {
                       </View>
                     </View>
                     <View style={styles.dispenserActions}>
-                      {isDeviceConnected(dispenser.deviceId) && (
+                      {isDeviceConnected(dispenser.deviceId) && dispenser.deviceId === currentPet.dispenserId && (
                         <>
                           <TouchableOpacity
                             style={styles.actionButton}
