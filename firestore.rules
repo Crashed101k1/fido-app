@@ -66,5 +66,10 @@ service cloud.firestore {
     match /{document=**} {
       allow read, write: if false;
     }
+
+    // Permitir temporalmente lectura y escritura en la colección FeedingRecords para pruebas.
+    match /feedingRecords/{document=**} {
+      allow read, write: if true;
+    }
   }
 }

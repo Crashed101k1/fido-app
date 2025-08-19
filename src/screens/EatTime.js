@@ -828,21 +828,39 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
         setModalVisible(true);
         return;
       }
-      // Convertir horarios al formato del ESP32
-      const schedulesToSync = enabledTimes.map(time => {
+
+      // Crear documentos en Firestore y armar array para la placa
+      const schedulesToSync = [];
+      for (const time of enabledTimes) {
         let hour = parseInt(time.hour);
         const minute = parseInt(time.minutes || '0');
         if (time.period === 'pm' && hour !== 12) hour += 12;
         if (time.period === 'am' && hour === 12) hour = 0;
-        return {
+        // Crear documento en feedingRecords con estado 'scheduled'
+        const docData = {
+          petId: currentPet.id,
+          userId: currentUser?.uid || null,
+          timestamp: new Date().toISOString(),
+          type: 'automatic',
+          source: 'dispenser',
+          status: 'scheduled',
+          feedingTimeId: time.id,
+          amount: parseFloat(selectedPortion.amount),
+          amountUnit: 'grams',
+          scheduledHour: hour,
+          scheduledMinute: minute
+        };
+        const docRef = await addDoc(collection(db, 'feedingRecords'), docData);
+        schedulesToSync.push({
+          id: docRef.id,
           hour: hour,
           minute: minute,
           portion: parseFloat(selectedPortion.amount),
           active: true
-        };
-      });
+        });
+      }
       console.log('[SYNC] Intentando sincronizar horarios:', schedulesToSync);
-      // Enviar al dispensador
+      // Enviar al dispensador el array con los IDs
       await syncSchedulesToDispenser(currentPet.dispenserId, schedulesToSync);
       console.log('[SYNC] Sincronización exitosa con el dispensador:', currentPet.dispenserId);
       setModalType('info');
@@ -1011,6 +1029,10 @@ const EatTimeScreen = forwardRef(({ navigation, route }, ref) => {
             .then(() => {
               setDispensedToday(prev => ({ ...prev, [horarioId]: true }));
               console.log(`[DISPENSE] Alimento dispensado para horario ${horarioId}`);
+              // Registrar en feedingRecords con feedingTimeId
+              if (currentPet && window.addFeedingRecord) {
+                window.addFeedingRecord(currentPet.id, parseFloat(selectedPortion.amount), 'automatic', time.id);
+              }
             })
             .catch(err => {
               console.error('[DISPENSE] Error:', err.message);

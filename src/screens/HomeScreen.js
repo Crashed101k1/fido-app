@@ -31,7 +31,7 @@ import { useContext } from 'react';
 import { DispenserDiscoveryContext } from '../context/DispenserDiscoveryContext';
 import { getPetIconInfo } from '../utils/petIcons';
 import { formatDate, formatFutureDate, formatPercentageWithColor } from '../utils/dateUtils';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import {
   View,
@@ -56,13 +56,15 @@ export default function HomeScreen({ navigation }) {
   const [connectPassword, setConnectPassword] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState('');
+  const [pendingRecordId, setPendingRecordId] = useState(null);
   // Contexto global para funciones del dispensador
   const {
     sendDispenseCommand,
     isDeviceConnected,
     mqttConnected,
     connectToDispenser,
-    disconnectFromDispenser
+    disconnectFromDispenser,
+    setOnDispenseCompleted
   } = useContext(DispenserDiscoveryContext);
   const { addNotification, removeNotification } = useNotifications();
   const { pets, loading } = usePets();
@@ -123,7 +125,7 @@ export default function HomeScreen({ navigation }) {
   /**
    * Registra una alimentación inmediata en Firebase
    */
-  const addFeedingRecord = async (petId, amount = null, dispenserType = 'manual') => {
+  const addFeedingRecord = async (petId, amount = null, dispenserType = 'manual', feedingTimeId = null) => {
     try {
       const now = new Date();
       const auth = getAuth();
@@ -136,18 +138,16 @@ export default function HomeScreen({ navigation }) {
         timestamp: now.toISOString(),
         type: dispenserType,
         source: 'dispenser',
-        createdAt: now.toISOString()
+        createdAt: now.toISOString(),
+        status: 'pending',
+        feedingTimeId: feedingTimeId,
+        amount: amount !== null ? parseFloat(amount) : null,
+        amountUnit: 'grams'
       };
-      
-      // Agregar cantidad si está disponible
-      if (amount !== null) {
-        docData.amount = parseFloat(amount);
-        docData.amountUnit = 'grams';
-      }
-      
-      console.log('[FIREBASE] Documento a guardar en feedingRecords:', docData);
-      await addDoc(collection(db, 'feedingRecords'), docData);
-      console.log('[FIREBASE] Documento guardado correctamente en feedingRecords');
+      const docRef = await addDoc(collection(db, 'feedingRecords'), docData);
+      console.log('[FIREBASE] Documento guardado correctamente en feedingRecords:', docRef.id);
+      setPendingRecordId(docRef.id); // Guardar el ID para actualizar luego
+      return docRef.id;
     } catch (error) {
       console.error('[FIREBASE] Error guardando en feedingRecords:', error);
       throw error;
@@ -157,33 +157,97 @@ export default function HomeScreen({ navigation }) {
   // Listener para confirmaciones de dispensación desde el ESP32
   useEffect(() => {
     if (!currentPet?.dispenserId) return;
-    
-    const handleDispensingComplete = (data) => {
+
+    const handleDispensingComplete = async (data) => {
       console.log('[DISPENSING] Confirmación recibida del ESP32:', data);
-      if (data.state === 'completed' && data.dispensedAmount > 0 && data.type) {
-        // Registrar en Firebase con la cantidad real dispensada
-        addFeedingRecord(currentPet.id, data.dispensedAmount, data.type)
-          .then(() => {
-            console.log('[FIREBASE] Registro automático completado');
-          })
-          .catch((error) => {
-            console.error('[FIREBASE] Error en registro automático:', error);
-          });
+      if (data.result === 'completed' && pendingRecordId) {
+        // Log extra antes de actualizar
+        console.log('[FIREBASE][DEBUG] Intentando actualizar registro:', pendingRecordId);
+        try {
+          const recordRef = doc(db, 'feedingRecords', pendingRecordId);
+          const updateData = {
+            status: 'completed',
+            completedAt: new Date().toISOString()
+          };
+          // Si la ESP32 envía amount real, actualizarlo
+          if (data.amount !== undefined && data.amount !== null) {
+            updateData.amount = parseFloat(data.amount);
+          }
+          console.log('[FIREBASE][DEBUG] updateDoc payload:', updateData);
+          await updateDoc(recordRef, updateData);
+          console.log('[FIREBASE][DEBUG] updateDoc ejecutado correctamente para:', pendingRecordId);
+          setPendingRecordId(null);
+        } catch (error) {
+          console.error('[FIREBASE][DEBUG] Error actualizando registro en feedingRecords:', error);
+        }
       }
     };
 
     // TODO: Agregar listener real para mensajes MQTT del dispensador
     // Esto debería conectarse al contexto MQTT para escuchar confirmaciones
-    
+
     return () => {
       // Cleanup si es necesario
     };
-  }, [currentPet?.dispenserId, addFeedingRecord]);
+  }, [currentPet?.dispenserId, pendingRecordId]);
 
+  // Callback para dispensación completada
+  useEffect(() => {
+      // Función para actualizar el registro en Firestore al recibir confirmación MQTT
+      const handleDispensingComplete = async (mqttMessage) => {
+        try {
+          if (!pendingRecordId) {
+            console.log('[FIREBASE][DEBUG] No hay pendingRecordId para actualizar.');
+            return;
+          }
+          const updatePayload = {
+            status: 'completed',
+            amount: mqttMessage.amount || mqttMessage.dispensedAmount || null,
+            completedAt: new Date(),
+            message: mqttMessage.message || '',
+          };
+          // Solo actualizar feedingTimeId si viene con valor válido
+          if (mqttMessage.feedingTimeId !== null && mqttMessage.feedingTimeId !== undefined) {
+            updatePayload.feedingTimeId = mqttMessage.feedingTimeId;
+          }
+          console.log('[FIREBASE][DEBUG] Intentando actualizar registro:', pendingRecordId);
+          console.log('[FIREBASE][DEBUG] updateDoc payload:', updatePayload);
+          await updateDoc(doc(db, 'feedingRecords', pendingRecordId), updatePayload);
+          console.log('[FIREBASE][DEBUG] Registro actualizado correctamente:', pendingRecordId);
+        } catch (error) {
+          console.error('[FIREBASE][ERROR] Error al actualizar registro:', error);
+        }
+      };
+    setOnDispenseCompleted((mqttMessage) => {
+      console.log('[MQTT CALLBACK] Mensaje recibido:', mqttMessage);
+      console.log('[MQTT CALLBACK] Campos clave:', {
+        result: mqttMessage.result,
+        command: mqttMessage.command,
+        petId: mqttMessage.petId,
+        userId: mqttMessage.userId,
+        amount: mqttMessage.amount,
+        feedingTimeId: mqttMessage.feedingTimeId,
+        type: mqttMessage.type
+      });
+      // Actualizar registro si hay pendingRecordId y el resultado es 'completed'
+      if (
+        mqttMessage.result === 'completed' &&
+        mqttMessage.command === 'dispense' &&
+        pendingRecordId
+      ) {
+        console.log('[MQTT CALLBACK] Actualizando registro existente en Firestore:', pendingRecordId);
+        // El update real lo hace el handleDispensingComplete
+        handleDispensingComplete(mqttMessage);
+      } else {
+        console.log('[MQTT CALLBACK] No cumple condiciones para actualizar registro. Verifica los campos clave arriba.');
+      }
+    });
+    return () => setOnDispenseCompleted(null);
+  }, [setOnDispenseCompleted]);
 
   useEffect(() => {
     if (!pets) return;
-    
+
     if (pets.length === 0) {
       addNotification({
         id: 'add-first-pet',
@@ -192,41 +256,21 @@ export default function HomeScreen({ navigation }) {
         color: '#4CAF50',
         onPress: () => {
           navigation.navigate('MyPet');
-          return false;
-        }
-      });
-    } else {
-      removeNotification('add-first-pet');
-      
-      pets.forEach((pet) => {
-        if (!pet.name || !pet.species || !pet.age || !pet.weight) {
-          addNotification({
-            id: `pet-incomplete-${pet.id}`,
-            message: `Completa los datos de ${pet.name || 'tu mascota'}.`,
-            icon: pet.species ? getPetIconInfo(pet.species).name : 'create',
-            color: pet.species ? getPetIconInfo(pet.species).speciesColor : '#FF9800',
-            onPress: () => {
-              navigation.navigate('MyPet', { selectedPetId: pet.id });
-              return false;
-            }
-          });
-        } else {
-          removeNotification(`pet-incomplete-${pet.id}`);
-        }
-
-        if (!pet.hasFeedingTimes || !pet.hasPortions) {
-          addNotification({
-            id: `pet-config-${pet.id}`,
-            message: `Configura horarios y porciones para ${pet.name}.`,
-            icon: pet.species ? getPetIconInfo(pet.species).name : 'time',
-            color: pet.species ? getPetIconInfo(pet.species).speciesColor : '#2196F3',
-            onPress: () => {
-              navigation.navigate('EatTime', { selectedPetId: pet.id });
-              return false;
-            }
-          });
-        } else {
-          removeNotification(`pet-config-${pet.id}`);
+          const now = new Date();
+          const auth = getAuth();
+          const userId = auth.currentUser ? auth.currentUser.uid : null;
+          console.log('[FIREBASE] userId a guardar:', userId);
+          if (!userId) {
+            console.error('Usuario no autenticado');
+            addNotification && addNotification({
+              id: `feed-error-auth-${Date.now()}`,
+              message: 'Error: usuario no autenticado.',
+              icon: 'close-circle',
+              color: '#F44336',
+              duration: 4000
+            });
+            return;
+          }
         }
       });
     }
@@ -259,14 +303,37 @@ export default function HomeScreen({ navigation }) {
       return;
     }
     try {
-      console.log('[APP] Enviando comando MQTT DISPENSE a', currentPet.dispenserId, 'por 150g');
       const auth = getAuth();
       const userId = auth.currentUser ? auth.currentUser.uid : null;
-      const result = await sendDispenseCommand(currentPet.dispenserId, 150, currentPet.id, userId);
+      // Detectar si hay feedingTimeId en el contexto actual
+      let feedingTimeId = null;
+      if (typeof selectedFeedingTime !== 'undefined' && selectedFeedingTime && selectedFeedingTime.id) {
+        feedingTimeId = selectedFeedingTime.id;
+      } else if (typeof currentFeedingTime !== 'undefined' && currentFeedingTime && currentFeedingTime.id) {
+        feedingTimeId = currentFeedingTime.id;
+      } // Si tienes otra variable de horario, agrégala aquí
+
+      const commandPayload = {
+        action: 'dispense',
+        amount: 150,
+        petId: currentPet.id,
+        userId,
+        type: 'manual',
+        feedingTimeId: feedingTimeId // ahora sí se pasa correctamente
+      };
+      // Guardar registro en Firestore al enviar el comando
+      const recordId = await addFeedingRecord(
+        currentPet.id,
+        commandPayload.amount,
+        commandPayload.type,
+        commandPayload.feedingTimeId || null
+      );
+      setPendingRecordId(recordId);
+      const result = await sendDispenseCommand(currentPet.dispenserId, commandPayload);
       if (result.success) {
         Alert.alert(
           'Comando Enviado',
-          `Se envió comando de dispensación para ${currentPet.name}. El registro se completará automáticamente.`,
+          `Se envió comando de dispensación para ${currentPet.name}. Esperando confirmación del dispensador...`,
           [{ text: "OK" }]
         );
       } else {
@@ -285,8 +352,49 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  useEffect(() => {
+    if (!currentPet?.dispenserId) return;
+    // Suscribirse al topic de confirmación MQTT
+    const topicResponse = `fido/dispensers/${currentPet.dispenserId}/response`;
+    const handleMQTTMessage = async (topic, msg) => {
+      try {
+        const mqttMessage = typeof msg === 'string' ? JSON.parse(msg) : msg;
+        console.log('[MQTT] Mensaje recibido:', topic, mqttMessage);
+        if (topic.endsWith('/response') && mqttMessage.result === 'completed') {
+          if (pendingRecordId) {
+            const recordRef = doc(db, 'feedingRecords', pendingRecordId);
+            await updateDoc(recordRef, {
+              amount: mqttMessage.amount,
+              status: 'completed',
+              completedAt: new Date().toISOString()
+            });
+            console.log('[FIREBASE] Registro actualizado correctamente:', pendingRecordId);
+            setPendingRecordId(null);
+          } else {
+            console.warn('[FIREBASE] No hay pendingRecordId para actualizar');
+          }
+        }
+      } catch (error) {
+        console.error('[MQTT] Error procesando mensaje:', error);
+      }
+    };
+    // Aquí debes conectar el listener real de tu cliente MQTT
+    if (window.mqttClient) {
+      window.mqttClient.on('message', handleMQTTMessage);
+      window.mqttClient.subscribe(topicResponse);
+    }
+    // Limpieza al desmontar
+    return () => {
+      if (window.mqttClient) {
+        window.mqttClient.off('message', handleMQTTMessage);
+        window.mqttClient.unsubscribe(topicResponse);
+      }
+    };
+  }, [currentPet?.dispenserId, pendingRecordId]);
+
   return (
     <View style={styles.container}>
+      {/* Botón de prueba para guardar registro en feedingRecords */}
       <ScrollView
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
@@ -412,11 +520,11 @@ export default function HomeScreen({ navigation }) {
               ) : feedingData.feedingHistory && feedingData.feedingHistory.length > 0 ? (
                 <>
                   <Text style={styles.cardValue}>
-                    {feedingData.feedingHistory[0].timestamp 
-                      ? new Date(feedingData.feedingHistory[0].timestamp).toLocaleTimeString('es-ES', { 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })
+                    {feedingData.feedingHistory[0].timestamp
+                      ? new Date(feedingData.feedingHistory[0].timestamp).toLocaleTimeString('es-ES', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
                       : 'Sin registro'
                     }
                   </Text>
@@ -446,13 +554,13 @@ export default function HomeScreen({ navigation }) {
               ) : (
                 <>
                   <Text style={styles.cardValue}>
-                    {feedingData.nextFeed 
-                      ? feedingData.nextFeed.displayTime 
+                    {feedingData.nextFeed
+                      ? feedingData.nextFeed.displayTime
                       : 'No programado'
                     }
                   </Text>
                   <Text style={styles.cardSubtitle}>
-                    {feedingData.nextFeed 
+                    {feedingData.nextFeed
                       ? (feedingData.nextFeed.isToday ? 'Hoy' : 'Mañana')
                       : 'Ve a "Configurar Horarios"'
                     }
@@ -480,14 +588,14 @@ export default function HomeScreen({ navigation }) {
                     {`${feedingData.todayProgress?.completed || 0}/${feedingData.todayProgress?.total || 0}`}
                   </Text>
                   <View style={styles.progressBarContainer}>
-                    <View 
+                    <View
                       style={[
-                        styles.progressBar, 
-                        { 
+                        styles.progressBar,
+                        {
                           width: `${feedingData.todayProgress?.percentage || 0}%`,
                           backgroundColor: (feedingData.todayProgress?.percentage || 0) >= 100 ? '#4CAF50' : '#2196F3'
                         }
-                      ]} 
+                      ]}
                     />
                   </View>
                   <Text style={styles.progressPercentage}>
@@ -503,10 +611,10 @@ export default function HomeScreen({ navigation }) {
             {/* Card: Nivel de Alimento */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
-                <Ionicons 
-                  name="restaurant" 
-                  size={20} 
-                  color={formatPercentageWithColor(dispenserData.foodLevel).color} 
+                <Ionicons
+                  name="restaurant"
+                  size={20}
+                  color={formatPercentageWithColor(dispenserData.foodLevel).color}
                 />
                 <Text style={styles.cardTitle}>Nivel de Alimento</Text>
               </View>
@@ -514,23 +622,23 @@ export default function HomeScreen({ navigation }) {
                 <Text style={styles.cardValue}>Conectando...</Text>
               ) : (
                 <View style={styles.cardProgressContainer}>
-                  <Text 
+                  <Text
                     style={[
-                      styles.cardValue, 
+                      styles.cardValue,
                       { color: formatPercentageWithColor(dispenserData.foodLevel).color }
                     ]}
                   >
                     {formatPercentageWithColor(dispenserData.foodLevel).text}
                   </Text>
                   <View style={styles.progressBarContainer}>
-                    <View 
+                    <View
                       style={[
-                        styles.progressBar, 
-                        { 
+                        styles.progressBar,
+                        {
                           width: `${dispenserData.foodLevel}%`,
                           backgroundColor: formatPercentageWithColor(dispenserData.foodLevel).color
                         }
-                      ]} 
+                      ]}
                     />
                   </View>
                   {dispenserData.isOnline && (
@@ -542,7 +650,7 @@ export default function HomeScreen({ navigation }) {
                 </View>
               )}
               <Text style={styles.cardSubtitle}>
-                {currentPet?.dispenserId 
+                {currentPet?.dispenserId
                   ? (dispenserData.isOnline ? 'Dispensador activo' : 'Dispensador offline')
                   : 'Sin dispensador'
                 }
@@ -828,7 +936,7 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     fontWeight: '500',
   },
-  
+
   // Botón dispensar
   dispenseContainer: {
     alignItems: 'center',

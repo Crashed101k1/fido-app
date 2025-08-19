@@ -85,13 +85,14 @@ export function useFeedingData(petId) {
         };
       }).sort((a, b) => a.minutes - b.minutes);
 
-      // Para cada horario, buscar si hay registro en feedingRecords dentro de ±2 minutos
+      // Para cada horario, buscar si hay registro en feedingRecords con el mismo feedingTimeId
       const completedTimes = scheduledTimes.filter(sched => {
         return todayRecordsData.some(rec => {
-          const recDate = rec.timestamp ? new Date(rec.timestamp) : null;
-          if (!recDate) return false;
-          const diff = Math.abs((recDate.getTime() - sched.scheduledDate.getTime()) / 60000); // minutos
-          return diff <= 2;
+          // Nuevo: comparar por feedingTimeId
+          if (!rec.feedingTimeId) return false;
+          const match = rec.feedingTimeId === sched.id;
+          console.log(`[PROGRESO] Horario ${sched.id} (${sched.hour}:${sched.minutesValue}) vs registro feedingTimeId: ${rec.feedingTimeId} => ${match}`);
+          return match;
         });
       });
 

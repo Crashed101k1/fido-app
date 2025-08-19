@@ -15,6 +15,7 @@ export function useDispenserDiscovery() {
   const scanTimeout = useRef(null);
   const messageHandlers = useRef(new Map());
   const clientLoaded = useRef(false);
+  const onDispenseCompletedRef = useRef(null);
 
   // Configuración MQTT (broker shiftr.io)
   const MQTT_CONFIG = {
@@ -151,6 +152,24 @@ export function useDispenserDiscovery() {
             messageHandlers.current.delete(handlerKey);
           }
         }
+        // Callback global para dispensación completada: asegurar que todos los campos relevantes se pasen
+        if (
+          commandKey === 'dispense' &&
+          (message.result === 'success' || message.result === 'completed') &&
+          typeof onDispenseCompletedRef.current === 'function'
+        ) {
+          // Aseguramos que los campos petId, userId, amount, feedingTimeId estén presentes
+          const callbackPayload = {
+            deviceId,
+            petId: message.petId || null,
+            userId: message.userId || null,
+            amount: message.amount || message.dispensedAmount || null,
+            feedingTimeId: message.feedingTimeId || null,
+            type: message.type || null,
+            ...message
+          };
+          onDispenseCompletedRef.current(callbackPayload);
+        }
       }
     } catch (error) {
       console.error('[MQTT] Error procesando mensaje:', error);
@@ -266,7 +285,8 @@ export function useDispenserDiscovery() {
     }
     return new Promise((resolve, reject) => {
       const commandTopic = MQTT_CONFIG.topics.commands.replace('{deviceId}', deviceId);
-      const dispenseMsg = { action: 'dispense', amount: cantidad };
+      // Si cantidad es un objeto, lo usamos como payload completo
+      const dispenseMsg = typeof cantidad === 'object' ? cantidad : { action: 'dispense', amount: cantidad };
       messageHandlers.current.set(`${deviceId}_dispense`, response => {
         if (response.result === 'success') {
           resolve({ success: true, message: 'Alimento dispensado' });
@@ -323,6 +343,7 @@ export function useDispenserDiscovery() {
     isDeviceConnected,
     disconnectFromDispenser,
     syncSchedulesToDispenser,
-    sendDispenseCommand
+    sendDispenseCommand,
+    setOnDispenseCompleted: cb => { onDispenseCompletedRef.current = cb; }
   };
 }

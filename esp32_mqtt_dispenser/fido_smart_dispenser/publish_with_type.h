@@ -41,15 +41,19 @@ void publishSensorData(float weight, float distance, String dispenserState, floa
 }
 
 // Función para publicar respuesta a comandos con campo 'type' opcional
-void publishResponseWithType(const char* command, const char* result, const char* message, String type) {
+void publishResponseWithType(const char* command, const char* result, const char* message, String type, String petId, String userId, float amount, String feedingTimeId) {
   if (!mqttConnected) return;
-  StaticJsonDocument<250> doc;
+  StaticJsonDocument<350> doc;
   doc["deviceId"] = device_id;
   doc["command"] = command;
   doc["result"] = result;
   doc["message"] = message;
   doc["timestamp"] = millis();
   if (type.length() > 0) doc["type"] = type;
+  if (petId.length() > 0) doc["petId"] = petId;
+  if (userId.length() > 0) doc["userId"] = userId;
+  doc["amount"] = round(amount * 10) / 10.0;
+  if (feedingTimeId.length() > 0) doc["feedingTimeId"] = feedingTimeId;
   String response;
   serializeJson(doc, response);
   client.publish(topic_response.c_str(), response.c_str());
