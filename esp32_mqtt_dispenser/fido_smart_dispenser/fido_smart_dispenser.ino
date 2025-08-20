@@ -26,6 +26,8 @@
 #define SERVO_PIN 13 // Pin para control del servo motor
 #define DT_PIN 5     // Pin DT del HX711 (celda de carga)
 #define SCK_PIN 4    // Pin SCK del HX711
+#define BUTTON_DISPENSE_PIN 12 // Botón físico para dispensación manual
+#define BUTTON_POWER_PIN 16    // Botón físico para encender/apagar
 
 // ========== UMBRALES DE DISTANCIA (cm) ==========
 #define DISTANCIA_LLENO 4.0     // Distancia para considerar "LLENO" (cm, fondo a comida llena)
@@ -519,9 +521,7 @@ void iniciarDispensacion()
   lcd.print("Porcion: ");
   lcd.print(dispensingViaApp ? targetDispenseAmount : targetDispenseAmount, 1);
   lcd.print("g");
-  delay(1200);
-
-  abrirDispensador();
+  abrirDispensador(); // Abrir el servo inmediatamente
 
   float pesoInicial = peso;
   float umbralActual = targetDispenseAmount;
@@ -537,26 +537,22 @@ void iniciarDispensacion()
     {
       progreso = constrain(diferencia / umbralActual, 0.0f, 1.0f);
     }
-    // Actualizar pantalla con barra de progreso
     if (!mostrandoResultado)
     {
       actualizarLCD(peso, distancia, "Dispensando", false, progreso);
     }
-    // Enviar datos en tiempo real con campo 'type'
     publishSensorData(peso, distancia, "dispensing", diferencia, calcularPorcentajeLlenado(distancia), tipoDispensacion);
-    // Mantener conexión MQTT
     maintainMQTTConnection();
-    // Condición de salida: alcanzó el peso objetivo
     if (diferencia >= umbralActual)
     {
       cantidadDispensada = diferencia;
+      cerrarDispensador(); // Cerrar el servo inmediatamente al alcanzar el objetivo
       break;
     }
     delay(100);
   }
 
   // Finalización
-  cerrarDispensador();
   mostrandoResultado = true;
   tiempoFinDispensacion = millis();
   dispensingViaApp = false;
@@ -622,6 +618,10 @@ void setup()
   // Configuración sensor ultrasónico
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
+
+    // Configuración botones físicos
+  pinMode(BUTTON_DISPENSE_PIN, INPUT_PULLUP); // Botón dispensar
+  pinMode(BUTTON_POWER_PIN, INPUT_PULLUP);    // Botón encender/apagar
 
   // Configuración servo motor
   ESP32PWM::allocateTimer(0);
@@ -749,6 +749,31 @@ void loop()
     dispensingViaApp = false; // Dispensación manual por serial
     iniciarDispensacion();
   }
+
+    // 5b. CONTROL POR BOTÓN FÍSICO DE DISPENSACIÓN MANUAL
+  static bool lastDispenseBtnState = HIGH;
+  bool dispenseBtnState = digitalRead(BUTTON_DISPENSE_PIN);
+  if (lastDispenseBtnState == HIGH && dispenseBtnState == LOW && !mostrandoResultado) {
+    // Botón presionado (flanco descendente)
+    Serial.println("[BOTÓN] Dispensación manual por botón físico");
+    dispensingViaApp = false;
+    iniciarDispensacion();
+  }
+  lastDispenseBtnState = dispenseBtnState;
+
+  // 5c. CONTROL POR BOTÓN FÍSICO DE ENCendido/APAGADO
+  static bool lastPowerBtnState = HIGH;
+  bool powerBtnState = digitalRead(BUTTON_POWER_PIN);
+  if (lastPowerBtnState == HIGH && powerBtnState == LOW) {
+    // Botón presionado (flanco descendente)
+    Serial.println("[BOTÓN] Encendido/Apagado solicitado");
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Apagando...");
+    delay(1000);
+    ESP.restart(); // Reinicia el ESP32 (simula apagado/encendido)
+  }
+  lastPowerBtnState = powerBtnState;
 
   // 6. EJECUCIÓN AUTOMÁTICA DE HORARIOS PROGRAMADOS
   if (!mostrandoResultado && numHorarios > 0)
